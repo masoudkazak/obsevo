@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: langfuse-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-langfuse}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-langfuse}
+      POSTGRES_DB: ${POSTGRES_DB:-langfuse_light}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-langfuse} -d ${POSTGRES_DB:-langfuse_light}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: langfuse-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Go API Server
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: langfuse-api
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      APP_PORT: 3001
+      DATABASE_URL: postgres://${POSTGRES_USER:-langfuse}:${POSTGRES_PASSWORD:-langfuse}@postgres:5432/${POSTGRES_DB:-langfuse_light}?sslmode=disable
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-your-jwt-secret-change-in-production}
+      APP_SECRET_KEY: ${APP_SECRET_KEY:-your-secret-key-change-in-production}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:

@@ -4,6 +4,8 @@
 *.dll
 *.so
 *.dylib
+server
+/bin/
 
 # Go
 /vendor/

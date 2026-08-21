@@ -1,0 +1,60 @@
+run:
+  timeout: 5m
+  modules-download-mode: readonly
+
+linters:
+  enable:
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - bodyclose
+    - contextcheck
+    - dupl
+    - errname
+    - errorlint
+    - exhaustive
+    - prealloc
+    - revive
+    - unconvert
+    - unparam
+    - whitespace
+
+linters-settings:
+  errcheck:
+    check-blank: true
+    exclude-functions:
+      - (io.Closer).Close
+      - (net.Listener).Close
+  govet:
+    check-shadowing: true
+  revive:
+    rules:
+      - name: blank-imports
+      - name: context-as-argument
+      - name: dot-imports
+      - name: error-return
+      - name: error-strings
+      - name: error-naming
+      - name: exported
+        arguments:
+          - "disableStutteringCheck"
+      - name: increment-decrement
+      - name: var-naming
+      - name: package-comments
+      - name: range
+      - name: receiver-naming
+      - name: time-naming
+      - name: unexported-return
+      - name: indent-error-flow
+      - name: errorf
+
+issues:
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - dupl
+        - govet
+        - unparam
