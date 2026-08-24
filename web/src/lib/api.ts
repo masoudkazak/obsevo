@@ -119,6 +119,104 @@ export interface IngestionResponse {
 	observations_created: number;
 }
 
+export interface AnalyticsSummary {
+	latency: LatencyStats;
+	cost: CostStats;
+	token_usage: TokenUsageStats;
+	error_rate: ErrorRateStats;
+	scores: ScoreAggregation[];
+}
+
+export interface LatencyStats {
+	total_traces: number;
+	avg_latency_seconds: number;
+	min_latency_seconds: number;
+	max_latency_seconds: number;
+}
+
+export interface CostStats {
+	total_traces: number;
+	total_cost: number;
+	avg_cost: number;
+	min_cost: number;
+	max_cost: number;
+}
+
+export interface TokenUsageStats {
+	total_traces: number;
+	total_tokens: number;
+	avg_tokens: number;
+	total_input_tokens: number;
+	total_output_tokens: number;
+}
+
+export interface ErrorRateStats {
+	total_traces: number;
+	error_traces: number;
+	error_rate: number;
+}
+
+export interface ScoreAggregation {
+	name: string;
+	count: number;
+	avg_value: number;
+	min_value: number;
+	max_value: number;
+}
+
+export interface CostOverTimePoint {
+	time_bucket: string;
+	trace_count: number;
+	total_cost: number;
+	avg_cost: number;
+}
+
+export interface LatencyOverTimePoint {
+	time_bucket: string;
+	trace_count: number;
+	avg_latency_seconds: number;
+	min_latency_seconds: number;
+	max_latency_seconds: number;
+}
+
+export interface TokenUsageOverTimePoint {
+	time_bucket: string;
+	trace_count: number;
+	total_tokens: number;
+	total_input_tokens: number;
+	total_output_tokens: number;
+}
+
+export interface TraceCountOverTimePoint {
+	time_bucket: string;
+	trace_count: number;
+	error_count: number;
+}
+
+export interface APIKey {
+	id: string;
+	project_id: string;
+	key: string;
+	name: string;
+	created_at: string;
+}
+
+export interface Member {
+	id: string;
+	user_id: string;
+	org_id: string;
+	role: string;
+	email: string;
+	user_name: string;
+}
+
+export interface UserProfile {
+	id: string;
+	email: string;
+	name: string;
+	created_at: string;
+}
+
 export const api = {
 	auth: {
 		register: (data: { email: string; password: string; name?: string }) =>
@@ -178,6 +276,70 @@ export const api = {
 				method: 'POST',
 				body: JSON.stringify({ version })
 			});
+		}
+	},
+	analytics: {
+		summary: (projectId: string) => {
+			const q = new URLSearchParams({ project_id: projectId });
+			return request<AnalyticsSummary>(`/api/analytics?${q}`);
+		},
+		costOverTime: (projectId: string, days?: number) => {
+			const q = new URLSearchParams({ project_id: projectId });
+			if (days) q.set('days', String(days));
+			return request<CostOverTimePoint[]>(`/api/analytics/cost-over-time?${q}`);
+		},
+		latencyOverTime: (projectId: string, days?: number) => {
+			const q = new URLSearchParams({ project_id: projectId });
+			if (days) q.set('days', String(days));
+			return request<LatencyOverTimePoint[]>(`/api/analytics/latency-over-time?${q}`);
+		},
+		tokensOverTime: (projectId: string, days?: number) => {
+			const q = new URLSearchParams({ project_id: projectId });
+			if (days) q.set('days', String(days));
+			return request<TokenUsageOverTimePoint[]>(`/api/analytics/tokens-over-time?${q}`);
+		},
+		tracesOverTime: (projectId: string, days?: number) => {
+			const q = new URLSearchParams({ project_id: projectId });
+			if (days) q.set('days', String(days));
+			return request<TraceCountOverTimePoint[]>(`/api/analytics/traces-over-time?${q}`);
+		}
+	},
+	settings: {
+		profile: {
+			get: () => request<UserProfile>('/api/profile'),
+			update: (data: { name: string }) =>
+				request<{ status: string }>('/api/profile', { method: 'PUT', body: JSON.stringify(data) })
+		},
+		apiKeys: {
+			list: (projectId: string) => {
+				const q = new URLSearchParams({ project_id: projectId });
+				return request<APIKey[]>(`/api/api-keys?${q}`);
+			},
+			create: (projectId: string, data: { name: string }) => {
+				const q = new URLSearchParams({ project_id: projectId });
+				return request<APIKey>(`/api/api-keys?${q}`, { method: 'POST', body: JSON.stringify(data) });
+			},
+			delete: (keyId: string, projectId: string) => {
+				const q = new URLSearchParams({ project_id: projectId });
+				return request<{ status: string }>(`/api/api-keys/${keyId}?${q}`, { method: 'DELETE' });
+			}
+		},
+		members: {
+			list: (orgId: string) => {
+				const q = new URLSearchParams({ org_id: orgId });
+				return request<Member[]>(`/api/members?${q}`);
+			},
+			updateRole: (userId: string, orgId: string, role: string) => {
+				const q = new URLSearchParams({ org_id: orgId });
+				return request<{ status: string }>(`/api/members/${userId}/role?${q}`, {
+					method: 'PUT',
+					body: JSON.stringify({ role })
+				});
+			},
+			remove: (userId: string, orgId: string) => {
+				const q = new URLSearchParams({ org_id: orgId });
+				return request<{ status: string }>(`/api/members/${userId}?${q}`, { method: 'DELETE' });
+			}
 		}
 	}
 };

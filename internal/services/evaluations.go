@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -284,4 +285,174 @@ func (s *EvaluationService) GetAnalyticsSummary(ctx context.Context, projectID s
 		ErrorRate:  errorRate,
 		Scores:     scores,
 	}, nil
+}
+
+// CostOverTimePoint represents cost data for a single day.
+type CostOverTimePoint struct {
+	TimeBucket string  `json:"time_bucket"`
+	TraceCount int64   `json:"trace_count"`
+	TotalCost  float64 `json:"total_cost"`
+	AvgCost    float64 `json:"avg_cost"`
+}
+
+// GetCostOverTime returns cost data grouped by day for a project.
+func (s *EvaluationService) GetCostOverTime(ctx context.Context, projectID string, days int) ([]CostOverTimePoint, error) {
+	since := time.Now().AddDate(0, 0, -days)
+	until := time.Now()
+
+	rows, err := s.queries.GetTraceCostOverTimeByProjectID(ctx, db.GetTraceCostOverTimeByProjectIDParams{
+		ProjectID:   projectID,
+		StartTime:   pgtype.Timestamptz{Time: since, Valid: true},
+		StartTime_2: pgtype.Timestamptz{Time: until, Valid: true},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("getting cost over time: %w", err)
+	}
+
+	result := make([]CostOverTimePoint, len(rows))
+	for i, row := range rows {
+		totalCost := 0.0
+		avgCost := 0.0
+		if v, ok := row.TotalCost.(float64); ok {
+			totalCost = v
+		}
+		if v, ok := row.AvgCost.(float64); ok {
+			avgCost = v
+		}
+		result[i] = CostOverTimePoint{
+			TimeBucket: row.TimeBucket.Time.Format("2006-01-02"),
+			TraceCount: row.TraceCount,
+			TotalCost:  totalCost,
+			AvgCost:    avgCost,
+		}
+	}
+	return result, nil
+}
+
+// LatencyOverTimePoint represents latency data for a single day.
+type LatencyOverTimePoint struct {
+	TimeBucket        string  `json:"time_bucket"`
+	TraceCount        int64   `json:"trace_count"`
+	AvgLatencySeconds float64 `json:"avg_latency_seconds"`
+	MinLatencySeconds float64 `json:"min_latency_seconds"`
+	MaxLatencySeconds float64 `json:"max_latency_seconds"`
+}
+
+// GetLatencyOverTime returns latency data grouped by day for a project.
+func (s *EvaluationService) GetLatencyOverTime(ctx context.Context, projectID string, days int) ([]LatencyOverTimePoint, error) {
+	since := time.Now().AddDate(0, 0, -days)
+	until := time.Now()
+
+	rows, err := s.queries.GetTraceLatencyOverTimeByProjectID(ctx, db.GetTraceLatencyOverTimeByProjectIDParams{
+		ProjectID:   projectID,
+		StartTime:   pgtype.Timestamptz{Time: since, Valid: true},
+		StartTime_2: pgtype.Timestamptz{Time: until, Valid: true},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("getting latency over time: %w", err)
+	}
+
+	result := make([]LatencyOverTimePoint, len(rows))
+	for i, row := range rows {
+		avgLat := 0.0
+		minLat := 0.0
+		maxLat := 0.0
+		if v, ok := row.AvgLatencySeconds.(float64); ok {
+			avgLat = v
+		}
+		if v, ok := row.MinLatencySeconds.(float64); ok {
+			minLat = v
+		}
+		if v, ok := row.MaxLatencySeconds.(float64); ok {
+			maxLat = v
+		}
+		result[i] = LatencyOverTimePoint{
+			TimeBucket:        row.TimeBucket.Time.Format("2006-01-02"),
+			TraceCount:        row.TraceCount,
+			AvgLatencySeconds: avgLat,
+			MinLatencySeconds: minLat,
+			MaxLatencySeconds: maxLat,
+		}
+	}
+	return result, nil
+}
+
+// TokenUsageOverTimePoint represents token usage data for a single day.
+type TokenUsageOverTimePoint struct {
+	TimeBucket        string `json:"time_bucket"`
+	TraceCount        int64  `json:"trace_count"`
+	TotalTokens       int64  `json:"total_tokens"`
+	TotalInputTokens  int64  `json:"total_input_tokens"`
+	TotalOutputTokens int64  `json:"total_output_tokens"`
+}
+
+// GetTokenUsageOverTime returns token usage data grouped by day for a project.
+func (s *EvaluationService) GetTokenUsageOverTime(ctx context.Context, projectID string, days int) ([]TokenUsageOverTimePoint, error) {
+	since := time.Now().AddDate(0, 0, -days)
+	until := time.Now()
+
+	rows, err := s.queries.GetTraceTokenUsageOverTimeByProjectID(ctx, db.GetTraceTokenUsageOverTimeByProjectIDParams{
+		ProjectID:   projectID,
+		StartTime:   pgtype.Timestamptz{Time: since, Valid: true},
+		StartTime_2: pgtype.Timestamptz{Time: until, Valid: true},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("getting token usage over time: %w", err)
+	}
+
+	result := make([]TokenUsageOverTimePoint, len(rows))
+	for i, row := range rows {
+		totalTokens := int64(0)
+		inputTokens := int64(0)
+		outputTokens := int64(0)
+		if v, ok := row.TotalTokens.(int64); ok {
+			totalTokens = v
+		}
+		if v, ok := row.TotalInputTokens.(int64); ok {
+			inputTokens = v
+		}
+		if v, ok := row.TotalOutputTokens.(int64); ok {
+			outputTokens = v
+		}
+		result[i] = TokenUsageOverTimePoint{
+			TimeBucket:        row.TimeBucket.Time.Format("2006-01-02"),
+			TraceCount:        row.TraceCount,
+			TotalTokens:       totalTokens,
+			TotalInputTokens:  inputTokens,
+			TotalOutputTokens: outputTokens,
+		}
+	}
+	return result, nil
+}
+
+// TraceCountOverTimePoint represents trace count data for a single day.
+type TraceCountOverTimePoint struct {
+	TimeBucket string `json:"time_bucket"`
+	TraceCount int64  `json:"trace_count"`
+	ErrorCount int64  `json:"error_count"`
+}
+
+// GetTraceCountOverTime returns trace count data grouped by day for a project.
+func (s *EvaluationService) GetTraceCountOverTime(ctx context.Context, projectID string, days int) ([]TraceCountOverTimePoint, error) {
+	since := time.Now().AddDate(0, 0, -days)
+	until := time.Now()
+
+	rows, err := s.queries.GetTraceCountOverTimeByProjectID(ctx, db.GetTraceCountOverTimeByProjectIDParams{
+		ProjectID:   projectID,
+		StartTime:   pgtype.Timestamptz{Time: since, Valid: true},
+		StartTime_2: pgtype.Timestamptz{Time: until, Valid: true},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("getting trace count over time: %w", err)
+	}
+
+	result := make([]TraceCountOverTimePoint, len(rows))
+	for i, row := range rows {
+		result[i] = TraceCountOverTimePoint{
+			TimeBucket: row.TimeBucket.Time.Format("2006-01-02"),
+			TraceCount: row.TraceCount,
+			ErrorCount: row.ErrorCount,
+		}
+	}
+	return result, nil
 }

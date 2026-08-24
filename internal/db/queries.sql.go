@@ -11,6 +11,17 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countDatasetItemsByDatasetID = `-- name: CountDatasetItemsByDatasetID :one
+SELECT COUNT(*) FROM dataset_items WHERE dataset_id = $1
+`
+
+func (q *Queries) CountDatasetItemsByDatasetID(ctx context.Context, datasetID string) (int64, error) {
+	row := q.db.QueryRow(ctx, countDatasetItemsByDatasetID, datasetID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countTracesByProjectID = `-- name: CountTracesByProjectID :one
 SELECT COUNT(*) FROM traces WHERE project_id = $1
 `
@@ -451,6 +462,29 @@ type DeleteAPIKeyParams struct {
 
 func (q *Queries) DeleteAPIKey(ctx context.Context, arg DeleteAPIKeyParams) error {
 	_, err := q.db.Exec(ctx, deleteAPIKey, arg.ID, arg.ProjectID)
+	return err
+}
+
+const deleteDataset = `-- name: DeleteDataset :exec
+DELETE FROM datasets WHERE id = $1
+`
+
+func (q *Queries) DeleteDataset(ctx context.Context, id string) error {
+	_, err := q.db.Exec(ctx, deleteDataset, id)
+	return err
+}
+
+const deleteMember = `-- name: DeleteMember :exec
+DELETE FROM members WHERE user_id = $1 AND org_id = $2
+`
+
+type DeleteMemberParams struct {
+	UserID string `db:"user_id" json:"user_id"`
+	OrgID  string `db:"org_id" json:"org_id"`
+}
+
+func (q *Queries) DeleteMember(ctx context.Context, arg DeleteMemberParams) error {
+	_, err := q.db.Exec(ctx, deleteMember, arg.UserID, arg.OrgID)
 	return err
 }
 
@@ -1175,6 +1209,56 @@ func (q *Queries) GetTraceByID(ctx context.Context, id string) (Trace, error) {
 	return i, err
 }
 
+const getTraceCostOverTimeByProjectID = `-- name: GetTraceCostOverTimeByProjectID :many
+SELECT
+  date_trunc('day', start_time)::timestamptz as time_bucket,
+  COUNT(*) as trace_count,
+  COALESCE(SUM(total_cost), 0) as total_cost,
+  COALESCE(AVG(total_cost), 0) as avg_cost
+FROM traces
+WHERE project_id = $1 AND start_time >= $2 AND start_time < $3 AND total_cost IS NOT NULL
+GROUP BY date_trunc('day', start_time)
+ORDER BY time_bucket
+`
+
+type GetTraceCostOverTimeByProjectIDParams struct {
+	ProjectID   string             `db:"project_id" json:"project_id"`
+	StartTime   pgtype.Timestamptz `db:"start_time" json:"start_time"`
+	StartTime_2 pgtype.Timestamptz `db:"start_time_2" json:"start_time_2"`
+}
+
+type GetTraceCostOverTimeByProjectIDRow struct {
+	TimeBucket pgtype.Timestamptz `db:"time_bucket" json:"time_bucket"`
+	TraceCount int64              `db:"trace_count" json:"trace_count"`
+	TotalCost  interface{}        `db:"total_cost" json:"total_cost"`
+	AvgCost    interface{}        `db:"avg_cost" json:"avg_cost"`
+}
+
+func (q *Queries) GetTraceCostOverTimeByProjectID(ctx context.Context, arg GetTraceCostOverTimeByProjectIDParams) ([]GetTraceCostOverTimeByProjectIDRow, error) {
+	rows, err := q.db.Query(ctx, getTraceCostOverTimeByProjectID, arg.ProjectID, arg.StartTime, arg.StartTime_2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetTraceCostOverTimeByProjectIDRow{}
+	for rows.Next() {
+		var i GetTraceCostOverTimeByProjectIDRow
+		if err := rows.Scan(
+			&i.TimeBucket,
+			&i.TraceCount,
+			&i.TotalCost,
+			&i.AvgCost,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getTraceCostStatsByProjectID = `-- name: GetTraceCostStatsByProjectID :one
 SELECT
   COUNT(*) as total_traces,
@@ -1226,6 +1310,51 @@ func (q *Queries) GetTraceCountByProjectIDAndTimeRange(ctx context.Context, arg 
 	return count, err
 }
 
+const getTraceCountOverTimeByProjectID = `-- name: GetTraceCountOverTimeByProjectID :many
+SELECT
+  date_trunc('day', t.start_time)::timestamptz as time_bucket,
+  COUNT(*) as trace_count,
+  COUNT(*) FILTER (WHERE EXISTS (
+    SELECT 1 FROM observations o WHERE o.trace_id = t.id AND o.status = 'ERROR'
+  )) as error_count
+FROM traces t
+WHERE t.project_id = $1 AND t.start_time >= $2 AND t.start_time < $3
+GROUP BY date_trunc('day', t.start_time)
+ORDER BY time_bucket
+`
+
+type GetTraceCountOverTimeByProjectIDParams struct {
+	ProjectID   string             `db:"project_id" json:"project_id"`
+	StartTime   pgtype.Timestamptz `db:"start_time" json:"start_time"`
+	StartTime_2 pgtype.Timestamptz `db:"start_time_2" json:"start_time_2"`
+}
+
+type GetTraceCountOverTimeByProjectIDRow struct {
+	TimeBucket pgtype.Timestamptz `db:"time_bucket" json:"time_bucket"`
+	TraceCount int64              `db:"trace_count" json:"trace_count"`
+	ErrorCount int64              `db:"error_count" json:"error_count"`
+}
+
+func (q *Queries) GetTraceCountOverTimeByProjectID(ctx context.Context, arg GetTraceCountOverTimeByProjectIDParams) ([]GetTraceCountOverTimeByProjectIDRow, error) {
+	rows, err := q.db.Query(ctx, getTraceCountOverTimeByProjectID, arg.ProjectID, arg.StartTime, arg.StartTime_2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetTraceCountOverTimeByProjectIDRow{}
+	for rows.Next() {
+		var i GetTraceCountOverTimeByProjectIDRow
+		if err := rows.Scan(&i.TimeBucket, &i.TraceCount, &i.ErrorCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getTraceErrorRateByProjectID = `-- name: GetTraceErrorRateByProjectID :one
 SELECT
   COUNT(*) as total_traces,
@@ -1246,6 +1375,59 @@ func (q *Queries) GetTraceErrorRateByProjectID(ctx context.Context, projectID st
 	var i GetTraceErrorRateByProjectIDRow
 	err := row.Scan(&i.TotalTraces, &i.ErrorTraces)
 	return i, err
+}
+
+const getTraceLatencyOverTimeByProjectID = `-- name: GetTraceLatencyOverTimeByProjectID :many
+SELECT
+  date_trunc('day', start_time)::timestamptz as time_bucket,
+  COUNT(*) as trace_count,
+  COALESCE(AVG(EXTRACT(EPOCH FROM (end_time - start_time))), 0) as avg_latency_seconds,
+  COALESCE(MIN(EXTRACT(EPOCH FROM (end_time - start_time))), 0) as min_latency_seconds,
+  COALESCE(MAX(EXTRACT(EPOCH FROM (end_time - start_time))), 0) as max_latency_seconds
+FROM traces
+WHERE project_id = $1 AND start_time >= $2 AND start_time < $3 AND end_time IS NOT NULL AND start_time IS NOT NULL
+GROUP BY date_trunc('day', start_time)
+ORDER BY time_bucket
+`
+
+type GetTraceLatencyOverTimeByProjectIDParams struct {
+	ProjectID   string             `db:"project_id" json:"project_id"`
+	StartTime   pgtype.Timestamptz `db:"start_time" json:"start_time"`
+	StartTime_2 pgtype.Timestamptz `db:"start_time_2" json:"start_time_2"`
+}
+
+type GetTraceLatencyOverTimeByProjectIDRow struct {
+	TimeBucket        pgtype.Timestamptz `db:"time_bucket" json:"time_bucket"`
+	TraceCount        int64              `db:"trace_count" json:"trace_count"`
+	AvgLatencySeconds interface{}        `db:"avg_latency_seconds" json:"avg_latency_seconds"`
+	MinLatencySeconds interface{}        `db:"min_latency_seconds" json:"min_latency_seconds"`
+	MaxLatencySeconds interface{}        `db:"max_latency_seconds" json:"max_latency_seconds"`
+}
+
+func (q *Queries) GetTraceLatencyOverTimeByProjectID(ctx context.Context, arg GetTraceLatencyOverTimeByProjectIDParams) ([]GetTraceLatencyOverTimeByProjectIDRow, error) {
+	rows, err := q.db.Query(ctx, getTraceLatencyOverTimeByProjectID, arg.ProjectID, arg.StartTime, arg.StartTime_2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetTraceLatencyOverTimeByProjectIDRow{}
+	for rows.Next() {
+		var i GetTraceLatencyOverTimeByProjectIDRow
+		if err := rows.Scan(
+			&i.TimeBucket,
+			&i.TraceCount,
+			&i.AvgLatencySeconds,
+			&i.MinLatencySeconds,
+			&i.MaxLatencySeconds,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getTraceLatencyStatsByProjectID = `-- name: GetTraceLatencyStatsByProjectID :one
@@ -1275,6 +1457,59 @@ func (q *Queries) GetTraceLatencyStatsByProjectID(ctx context.Context, projectID
 		&i.MaxLatencySeconds,
 	)
 	return i, err
+}
+
+const getTraceTokenUsageOverTimeByProjectID = `-- name: GetTraceTokenUsageOverTimeByProjectID :many
+SELECT
+  date_trunc('day', start_time)::timestamptz as time_bucket,
+  COUNT(*) as trace_count,
+  COALESCE(SUM((token_usage->>'total_tokens')::bigint), 0) as total_tokens,
+  COALESCE(SUM((token_usage->>'input_tokens')::bigint), 0) as total_input_tokens,
+  COALESCE(SUM((token_usage->>'output_tokens')::bigint), 0) as total_output_tokens
+FROM traces
+WHERE project_id = $1 AND start_time >= $2 AND start_time < $3 AND token_usage IS NOT NULL
+GROUP BY date_trunc('day', start_time)
+ORDER BY time_bucket
+`
+
+type GetTraceTokenUsageOverTimeByProjectIDParams struct {
+	ProjectID   string             `db:"project_id" json:"project_id"`
+	StartTime   pgtype.Timestamptz `db:"start_time" json:"start_time"`
+	StartTime_2 pgtype.Timestamptz `db:"start_time_2" json:"start_time_2"`
+}
+
+type GetTraceTokenUsageOverTimeByProjectIDRow struct {
+	TimeBucket        pgtype.Timestamptz `db:"time_bucket" json:"time_bucket"`
+	TraceCount        int64              `db:"trace_count" json:"trace_count"`
+	TotalTokens       interface{}        `db:"total_tokens" json:"total_tokens"`
+	TotalInputTokens  interface{}        `db:"total_input_tokens" json:"total_input_tokens"`
+	TotalOutputTokens interface{}        `db:"total_output_tokens" json:"total_output_tokens"`
+}
+
+func (q *Queries) GetTraceTokenUsageOverTimeByProjectID(ctx context.Context, arg GetTraceTokenUsageOverTimeByProjectIDParams) ([]GetTraceTokenUsageOverTimeByProjectIDRow, error) {
+	rows, err := q.db.Query(ctx, getTraceTokenUsageOverTimeByProjectID, arg.ProjectID, arg.StartTime, arg.StartTime_2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetTraceTokenUsageOverTimeByProjectIDRow{}
+	for rows.Next() {
+		var i GetTraceTokenUsageOverTimeByProjectIDRow
+		if err := rows.Scan(
+			&i.TimeBucket,
+			&i.TraceCount,
+			&i.TotalTokens,
+			&i.TotalInputTokens,
+			&i.TotalOutputTokens,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getTraceTokenUsageStatsByProjectID = `-- name: GetTraceTokenUsageStatsByProjectID :one
@@ -1495,6 +1730,21 @@ func (q *Queries) GetUserByID(ctx context.Context, id string) (User, error) {
 	return i, err
 }
 
+const updateMemberRole = `-- name: UpdateMemberRole :exec
+UPDATE members SET role = $3 WHERE user_id = $1 AND org_id = $2
+`
+
+type UpdateMemberRoleParams struct {
+	UserID string `db:"user_id" json:"user_id"`
+	OrgID  string `db:"org_id" json:"org_id"`
+	Role   string `db:"role" json:"role"`
+}
+
+func (q *Queries) UpdateMemberRole(ctx context.Context, arg UpdateMemberRoleParams) error {
+	_, err := q.db.Exec(ctx, updateMemberRole, arg.UserID, arg.OrgID, arg.Role)
+	return err
+}
+
 const updatePromptActive = `-- name: UpdatePromptActive :exec
 UPDATE prompts SET is_active = $3 WHERE project_id = $1 AND name = $2
 `
@@ -1584,4 +1834,18 @@ func (q *Queries) UpdateTrace(ctx context.Context, arg UpdateTraceParams) (Trace
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const updateUserName = `-- name: UpdateUserName :exec
+UPDATE users SET name = $2 WHERE id = $1
+`
+
+type UpdateUserNameParams struct {
+	ID   string      `db:"id" json:"id"`
+	Name pgtype.Text `db:"name" json:"name"`
+}
+
+func (q *Queries) UpdateUserName(ctx context.Context, arg UpdateUserNameParams) error {
+	_, err := q.db.Exec(ctx, updateUserName, arg.ID, arg.Name)
+	return err
 }

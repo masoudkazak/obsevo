@@ -251,3 +251,65 @@ SELECT * FROM dataset_run_items WHERE dataset_run_id = $1 ORDER BY created_at;
 INSERT INTO dataset_run_items (dataset_run_id, dataset_item_id, observation_id, score_id)
 VALUES ($1, $2, $3, $4)
 RETURNING *;
+
+-- name: DeleteDataset :exec
+DELETE FROM datasets WHERE id = $1;
+
+-- name: CountDatasetItemsByDatasetID :one
+SELECT COUNT(*) FROM dataset_items WHERE dataset_id = $1;
+
+-- name: GetTraceCostOverTimeByProjectID :many
+SELECT
+  date_trunc('day', start_time)::timestamptz as time_bucket,
+  COUNT(*) as trace_count,
+  COALESCE(SUM(total_cost), 0) as total_cost,
+  COALESCE(AVG(total_cost), 0) as avg_cost
+FROM traces
+WHERE project_id = $1 AND start_time >= $2 AND start_time < $3 AND total_cost IS NOT NULL
+GROUP BY date_trunc('day', start_time)
+ORDER BY time_bucket;
+
+-- name: GetTraceLatencyOverTimeByProjectID :many
+SELECT
+  date_trunc('day', start_time)::timestamptz as time_bucket,
+  COUNT(*) as trace_count,
+  COALESCE(AVG(EXTRACT(EPOCH FROM (end_time - start_time))), 0) as avg_latency_seconds,
+  COALESCE(MIN(EXTRACT(EPOCH FROM (end_time - start_time))), 0) as min_latency_seconds,
+  COALESCE(MAX(EXTRACT(EPOCH FROM (end_time - start_time))), 0) as max_latency_seconds
+FROM traces
+WHERE project_id = $1 AND start_time >= $2 AND start_time < $3 AND end_time IS NOT NULL AND start_time IS NOT NULL
+GROUP BY date_trunc('day', start_time)
+ORDER BY time_bucket;
+
+-- name: GetTraceTokenUsageOverTimeByProjectID :many
+SELECT
+  date_trunc('day', start_time)::timestamptz as time_bucket,
+  COUNT(*) as trace_count,
+  COALESCE(SUM((token_usage->>'total_tokens')::bigint), 0) as total_tokens,
+  COALESCE(SUM((token_usage->>'input_tokens')::bigint), 0) as total_input_tokens,
+  COALESCE(SUM((token_usage->>'output_tokens')::bigint), 0) as total_output_tokens
+FROM traces
+WHERE project_id = $1 AND start_time >= $2 AND start_time < $3 AND token_usage IS NOT NULL
+GROUP BY date_trunc('day', start_time)
+ORDER BY time_bucket;
+
+-- name: GetTraceCountOverTimeByProjectID :many
+SELECT
+  date_trunc('day', t.start_time)::timestamptz as time_bucket,
+  COUNT(*) as trace_count,
+  COUNT(*) FILTER (WHERE EXISTS (
+    SELECT 1 FROM observations o WHERE o.trace_id = t.id AND o.status = 'ERROR'
+  )) as error_count
+FROM traces t
+WHERE t.project_id = $1 AND t.start_time >= $2 AND t.start_time < $3
+GROUP BY date_trunc('day', t.start_time)
+ORDER BY time_bucket;
+
+-- name: UpdateMemberRole :exec
+UPDATE members SET role = $3 WHERE user_id = $1 AND org_id = $2;
+
+-- name: DeleteMember :exec
+DELETE FROM members WHERE user_id = $1 AND org_id = $2;
+
+-- name: UpdateUserName :exec
+UPDATE users SET name = $2 WHERE id = $1;

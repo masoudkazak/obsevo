@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 
@@ -182,6 +183,94 @@ func (h *EvaluationHandler) GetErrorRateStats(w http.ResponseWriter, r *http.Req
 	writeJSON(w, http.StatusOK, stats)
 }
 
+// GetCostOverTime handles GET /api/analytics/cost-over-time.
+func (h *EvaluationHandler) GetCostOverTime(w http.ResponseWriter, r *http.Request) {
+	projectID := r.URL.Query().Get("project_id")
+	if projectID == "" {
+		writeError(w, http.StatusBadRequest, "project_id is required")
+		return
+	}
+	days := 30
+	if d := r.URL.Query().Get("days"); d != "" {
+		if v, err := strconv.Atoi(d); err == nil && v > 0 && v <= 365 {
+			days = v
+		}
+	}
+
+	result, err := h.evalService.GetCostOverTime(r.Context(), projectID, days)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to get cost over time: "+err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+// GetLatencyOverTime handles GET /api/analytics/latency-over-time.
+func (h *EvaluationHandler) GetLatencyOverTime(w http.ResponseWriter, r *http.Request) {
+	projectID := r.URL.Query().Get("project_id")
+	if projectID == "" {
+		writeError(w, http.StatusBadRequest, "project_id is required")
+		return
+	}
+	days := 30
+	if d := r.URL.Query().Get("days"); d != "" {
+		if v, err := strconv.Atoi(d); err == nil && v > 0 && v <= 365 {
+			days = v
+		}
+	}
+
+	result, err := h.evalService.GetLatencyOverTime(r.Context(), projectID, days)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to get latency over time: "+err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+// GetTokenUsageOverTime handles GET /api/analytics/tokens-over-time.
+func (h *EvaluationHandler) GetTokenUsageOverTime(w http.ResponseWriter, r *http.Request) {
+	projectID := r.URL.Query().Get("project_id")
+	if projectID == "" {
+		writeError(w, http.StatusBadRequest, "project_id is required")
+		return
+	}
+	days := 30
+	if d := r.URL.Query().Get("days"); d != "" {
+		if v, err := strconv.Atoi(d); err == nil && v > 0 && v <= 365 {
+			days = v
+		}
+	}
+
+	result, err := h.evalService.GetTokenUsageOverTime(r.Context(), projectID, days)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to get token usage over time: "+err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+// GetTraceCountOverTime handles GET /api/analytics/traces-over-time.
+func (h *EvaluationHandler) GetTraceCountOverTime(w http.ResponseWriter, r *http.Request) {
+	projectID := r.URL.Query().Get("project_id")
+	if projectID == "" {
+		writeError(w, http.StatusBadRequest, "project_id is required")
+		return
+	}
+	days := 30
+	if d := r.URL.Query().Get("days"); d != "" {
+		if v, err := strconv.Atoi(d); err == nil && v > 0 && v <= 365 {
+			days = v
+		}
+	}
+
+	result, err := h.evalService.GetTraceCountOverTime(r.Context(), projectID, days)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to get trace count over time: "+err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
 // RegisterRoutes registers evaluation routes.
 func (h *EvaluationHandler) RegisterRoutes(r chi.Router) {
 	r.Post("/scores", h.CreateScore)
@@ -193,4 +282,8 @@ func (h *EvaluationHandler) RegisterRoutes(r chi.Router) {
 	r.Get("/analytics/cost", h.GetCostStats)
 	r.Get("/analytics/tokens", h.GetTokenUsageStats)
 	r.Get("/analytics/errors", h.GetErrorRateStats)
+	r.Get("/analytics/cost-over-time", h.GetCostOverTime)
+	r.Get("/analytics/latency-over-time", h.GetLatencyOverTime)
+	r.Get("/analytics/tokens-over-time", h.GetTokenUsageOverTime)
+	r.Get("/analytics/traces-over-time", h.GetTraceCountOverTime)
 }
