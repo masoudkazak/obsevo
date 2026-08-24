@@ -28,6 +28,18 @@ INSERT INTO members (user_id, org_id, role)
 VALUES ($1, $2, $3)
 RETURNING *;
 
+-- name: GetOrganizationsByUserID :many
+SELECT o.* FROM organizations o
+JOIN members m ON m.org_id = o.id
+WHERE m.user_id = $1
+ORDER BY o.created_at DESC;
+
+-- name: GetMembersByOrgID :many
+SELECT m.*, u.email, u.name as user_name FROM members m
+JOIN users u ON u.id = m.user_id
+WHERE m.org_id = $1
+ORDER BY m.id;
+
 -- name: GetProjectByID :one
 SELECT * FROM projects WHERE id = $1;
 
@@ -61,6 +73,20 @@ SELECT * FROM traces
 WHERE project_id = $1 
 ORDER BY start_time DESC
 LIMIT $2 OFFSET $3;
+
+-- name: GetTracesByProjectIDAndName :many
+SELECT * FROM traces 
+WHERE project_id = $1 AND name = $2
+ORDER BY start_time DESC
+LIMIT $3 OFFSET $4;
+
+-- name: CountTracesByProjectID :one
+SELECT COUNT(*) FROM traces WHERE project_id = $1;
+
+-- name: GetTraceWithProject :one
+SELECT t.*, p.name as project_name FROM traces t
+JOIN projects p ON p.id = t.project_id
+WHERE t.id = $1;
 
 -- name: CreateTrace :one
 INSERT INTO traces (project_id, name, input, output, metadata, user_id, session_id, tags, start_time, end_time, total_cost, token_usage)

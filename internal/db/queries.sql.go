@@ -11,6 +11,17 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countTracesByProjectID = `-- name: CountTracesByProjectID :one
+SELECT COUNT(*) FROM traces WHERE project_id = $1
+`
+
+func (q *Queries) CountTracesByProjectID(ctx context.Context, projectID string) (int64, error) {
+	row := q.db.QueryRow(ctx, countTracesByProjectID, projectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createAPIKey = `-- name: CreateAPIKey :one
 INSERT INTO api_keys (project_id, key, name)
 VALUES ($1, $2, $3)
@@ -728,6 +739,49 @@ func (q *Queries) GetMemberByUserAndOrg(ctx context.Context, arg GetMemberByUser
 	return i, err
 }
 
+const getMembersByOrgID = `-- name: GetMembersByOrgID :many
+SELECT m.id, m.user_id, m.org_id, m.role, u.email, u.name as user_name FROM members m
+JOIN users u ON u.id = m.user_id
+WHERE m.org_id = $1
+ORDER BY m.id
+`
+
+type GetMembersByOrgIDRow struct {
+	ID       string      `db:"id" json:"id"`
+	UserID   string      `db:"user_id" json:"user_id"`
+	OrgID    string      `db:"org_id" json:"org_id"`
+	Role     string      `db:"role" json:"role"`
+	Email    string      `db:"email" json:"email"`
+	UserName pgtype.Text `db:"user_name" json:"user_name"`
+}
+
+func (q *Queries) GetMembersByOrgID(ctx context.Context, orgID string) ([]GetMembersByOrgIDRow, error) {
+	rows, err := q.db.Query(ctx, getMembersByOrgID, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetMembersByOrgIDRow{}
+	for rows.Next() {
+		var i GetMembersByOrgIDRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.OrgID,
+			&i.Role,
+			&i.Email,
+			&i.UserName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getObservationByID = `-- name: GetObservationByID :one
 SELECT id, trace_id, type, name, input, output, metadata, model, model_parameters, start_time, end_time, token_usage, cost, status, parent_observation_id FROM observations WHERE id = $1
 `
@@ -806,6 +860,33 @@ func (q *Queries) GetOrganizationByID(ctx context.Context, id string) (Organizat
 	var i Organization
 	err := row.Scan(&i.ID, &i.Name, &i.CreatedAt)
 	return i, err
+}
+
+const getOrganizationsByUserID = `-- name: GetOrganizationsByUserID :many
+SELECT o.id, o.name, o.created_at FROM organizations o
+JOIN members m ON m.org_id = o.id
+WHERE m.user_id = $1
+ORDER BY o.created_at DESC
+`
+
+func (q *Queries) GetOrganizationsByUserID(ctx context.Context, userID string) ([]Organization, error) {
+	rows, err := q.db.Query(ctx, getOrganizationsByUserID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Organization{}
+	for rows.Next() {
+		var i Organization
+		if err := rows.Scan(&i.ID, &i.Name, &i.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getProjectByID = `-- name: GetProjectByID :one
@@ -1013,6 +1094,53 @@ func (q *Queries) GetTraceByID(ctx context.Context, id string) (Trace, error) {
 	return i, err
 }
 
+const getTraceWithProject = `-- name: GetTraceWithProject :one
+SELECT t.id, t.project_id, t.name, t.input, t.output, t.metadata, t.user_id, t.session_id, t.tags, t.start_time, t.end_time, t.total_cost, t.token_usage, t.created_at, p.name as project_name FROM traces t
+JOIN projects p ON p.id = t.project_id
+WHERE t.id = $1
+`
+
+type GetTraceWithProjectRow struct {
+	ID          string             `db:"id" json:"id"`
+	ProjectID   string             `db:"project_id" json:"project_id"`
+	Name        pgtype.Text        `db:"name" json:"name"`
+	Input       []byte             `db:"input" json:"input"`
+	Output      []byte             `db:"output" json:"output"`
+	Metadata    []byte             `db:"metadata" json:"metadata"`
+	UserID      pgtype.Text        `db:"user_id" json:"user_id"`
+	SessionID   pgtype.Text        `db:"session_id" json:"session_id"`
+	Tags        []string           `db:"tags" json:"tags"`
+	StartTime   pgtype.Timestamptz `db:"start_time" json:"start_time"`
+	EndTime     pgtype.Timestamptz `db:"end_time" json:"end_time"`
+	TotalCost   pgtype.Float8      `db:"total_cost" json:"total_cost"`
+	TokenUsage  []byte             `db:"token_usage" json:"token_usage"`
+	CreatedAt   pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	ProjectName string             `db:"project_name" json:"project_name"`
+}
+
+func (q *Queries) GetTraceWithProject(ctx context.Context, id string) (GetTraceWithProjectRow, error) {
+	row := q.db.QueryRow(ctx, getTraceWithProject, id)
+	var i GetTraceWithProjectRow
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Input,
+		&i.Output,
+		&i.Metadata,
+		&i.UserID,
+		&i.SessionID,
+		&i.Tags,
+		&i.StartTime,
+		&i.EndTime,
+		&i.TotalCost,
+		&i.TokenUsage,
+		&i.CreatedAt,
+		&i.ProjectName,
+	)
+	return i, err
+}
+
 const getTracesByProjectID = `-- name: GetTracesByProjectID :many
 SELECT id, project_id, name, input, output, metadata, user_id, session_id, tags, start_time, end_time, total_cost, token_usage, created_at FROM traces 
 WHERE project_id = $1 
@@ -1028,6 +1156,60 @@ type GetTracesByProjectIDParams struct {
 
 func (q *Queries) GetTracesByProjectID(ctx context.Context, arg GetTracesByProjectIDParams) ([]Trace, error) {
 	rows, err := q.db.Query(ctx, getTracesByProjectID, arg.ProjectID, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Trace{}
+	for rows.Next() {
+		var i Trace
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Name,
+			&i.Input,
+			&i.Output,
+			&i.Metadata,
+			&i.UserID,
+			&i.SessionID,
+			&i.Tags,
+			&i.StartTime,
+			&i.EndTime,
+			&i.TotalCost,
+			&i.TokenUsage,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getTracesByProjectIDAndName = `-- name: GetTracesByProjectIDAndName :many
+SELECT id, project_id, name, input, output, metadata, user_id, session_id, tags, start_time, end_time, total_cost, token_usage, created_at FROM traces 
+WHERE project_id = $1 AND name = $2
+ORDER BY start_time DESC
+LIMIT $3 OFFSET $4
+`
+
+type GetTracesByProjectIDAndNameParams struct {
+	ProjectID string      `db:"project_id" json:"project_id"`
+	Name      pgtype.Text `db:"name" json:"name"`
+	Limit     int32       `db:"limit" json:"limit"`
+	Offset    int32       `db:"offset" json:"offset"`
+}
+
+func (q *Queries) GetTracesByProjectIDAndName(ctx context.Context, arg GetTracesByProjectIDAndNameParams) ([]Trace, error) {
+	rows, err := q.db.Query(ctx, getTracesByProjectIDAndName,
+		arg.ProjectID,
+		arg.Name,
+		arg.Limit,
+		arg.Offset,
+	)
 	if err != nil {
 		return nil, err
 	}

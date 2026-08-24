@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -20,6 +19,9 @@ import (
 	"github.com/langfuse-light/langfuse-light/internal/auth"
 	"github.com/langfuse-light/langfuse-light/internal/config"
 	"github.com/langfuse-light/langfuse-light/internal/db"
+	"github.com/langfuse-light/langfuse-light/internal/queue"
+	"github.com/langfuse-light/langfuse-light/internal/services"
+	"github.com/langfuse-light/langfuse-light/internal/worker"
 )
 
 func main() {
@@ -58,9 +60,18 @@ func main() {
 	// Initialize JWT service
 	jwtService := auth.NewJWTService(cfg.JWTSecret, 24*time.Hour)
 
+	// Initialize services
+	traceService := services.NewTraceService(queries)
+
+	// Initialize queue and worker
+	ingestionQueue := queue.NewQueue(rdb)
+	ingestionWorker := worker.NewWorker(ingestionQueue, traceService, 1*time.Second)
+
+	// Start background worker
+	go ingestionWorker.Start(ctx)
+
 	// Initialize handlers
-	authHandler := api.NewAuthHandler(queries, jwtService)
-	projectHandler := api.NewProjectHandler(queries)
+	traceHandler := api.NewTraceHandler(traceService)
 
 	// Setup router
 	r := chi.NewRouter()
@@ -72,36 +83,9 @@ func main() {
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(30 * time.Second))
 
-	// Health check
-	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
-	})
-
-	// API routes
-	r.Route("/api", func(r chi.Router) {
-		// Public routes
-		r.Route("/auth", authHandler.RegisterRoutes)
-
-		// Protected routes
-		r.Group(func(r chi.Router) {
-			r.Use(auth.Middleware(jwtService))
-
-			// Project routes
-			r.Route("/", projectHandler.RegisterRoutes)
-
-			// Placeholder routes for future implementation
-			r.Get("/traces", func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
-				json.NewEncoder(w).Encode(map[string]string{"message": "traces endpoint"})
-			})
-
-			r.Get("/prompts", func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
-				json.NewEncoder(w).Encode(map[string]string{"message": "prompts endpoint"})
-			})
-		})
-	})
+	// Register all routes
+	apiRouter := api.NewRouter(queries, jwtService, traceHandler)
+	apiRouter.RegisterRoutes(r)
 
 	// Start server
 	addr := fmt.Sprintf(":%d", cfg.AppPort)
@@ -126,6 +110,10 @@ func main() {
 	<-quit
 
 	log.Println("Shutting down server...")
+
+	// Stop the worker
+	ingestionWorker.Stop()
+
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
