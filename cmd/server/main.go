@@ -64,6 +64,7 @@ func main() {
 	traceService := services.NewTraceService(queries)
 	promptService := services.NewPromptService(queries)
 	evalService := services.NewEvaluationService(queries)
+	datasetService := services.NewDatasetService(queries)
 
 	// Initialize queue and worker
 	ingestionQueue := queue.NewQueue(rdb)
@@ -76,6 +77,7 @@ func main() {
 	traceHandler := api.NewTraceHandler(traceService)
 	promptHandler := api.NewPromptHandler(promptService)
 	evalHandler := api.NewEvaluationHandler(evalService)
+	datasetHandler := api.NewDatasetHandler(datasetService)
 
 	// Setup router
 	r := chi.NewRouter()
@@ -88,7 +90,7 @@ func main() {
 	r.Use(middleware.Timeout(30 * time.Second))
 
 	// Register all routes
-	apiRouter := api.NewRouter(queries, jwtService, traceHandler, promptHandler, evalHandler)
+	apiRouter := api.NewRouter(queries, jwtService, traceHandler, promptHandler, evalHandler, datasetHandler)
 	apiRouter.RegisterRoutes(r)
 
 	// Start server
