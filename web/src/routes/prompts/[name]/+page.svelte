@@ -13,6 +13,7 @@
 	let showNewVersion = $state(false);
 	let newContent = $state('');
 	let newConfig = $state('{}');
+	let previewVars = $state<Record<string, string>>({});
 
 	$effect(() => {
 		const name = page.params.name;
@@ -50,6 +51,15 @@
 	}
 
 	let detectedVars = $derived(editContent ? extractVariables(editContent) : []);
+
+	let compiledPreview = $derived.by(() => {
+		if (!editContent) return '';
+		let result = editContent;
+		for (const [key, value] of Object.entries(previewVars)) {
+			result = result.replaceAll(`{{${key}}}`, value || `{{${key}}}`);
+		}
+		return result;
+	});
 
 	async function savePrompt() {
 		if (!prompt || !$currentProject) return;
@@ -191,8 +201,24 @@
 
 			<!-- Preview -->
 			<div class="bg-white rounded-lg border border-gray-200 p-6 mt-6">
-				<h3 class="text-sm font-medium text-gray-700 mb-2">Preview</h3>
-				<div class="p-4 bg-gray-50 rounded text-sm font-mono whitespace-pre-wrap">{editContent}</div>
+				<h3 class="text-sm font-medium text-gray-700 mb-3">Template Preview</h3>
+				{#if detectedVars.length > 0}
+					<div class="mb-4 space-y-2">
+						{#each detectedVars as v}
+							<div class="flex items-center gap-2">
+								<label for="preview-{v}" class="text-xs font-mono text-gray-500 w-32 shrink-0">{'{{'}{v}{'}}'}</label>
+								<input
+									id="preview-{v}"
+									type="text"
+									bind:value={previewVars[v]}
+									placeholder={`value for ${v}`}
+									class="flex-1 px-2 py-1 border border-gray-200 rounded text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-500"
+								/>
+							</div>
+						{/each}
+					</div>
+				{/if}
+				<div class="p-4 bg-gray-50 rounded text-sm font-mono whitespace-pre-wrap">{compiledPreview}</div>
 			</div>
 		{:else}
 			<!-- Versions list -->

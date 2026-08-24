@@ -1015,6 +1015,49 @@ func (q *Queries) GetPromptsByProjectID(ctx context.Context, projectID string) (
 	return items, nil
 }
 
+const getScoreAggregationByProjectID = `-- name: GetScoreAggregationByProjectID :many
+SELECT s.name, COUNT(*) as count, AVG(s.value) as avg_value, MIN(s.value) as min_value, MAX(s.value) as max_value
+FROM scores s
+JOIN traces t ON t.id = s.trace_id
+WHERE t.project_id = $1
+GROUP BY s.name
+ORDER BY s.name
+`
+
+type GetScoreAggregationByProjectIDRow struct {
+	Name     string      `db:"name" json:"name"`
+	Count    int64       `db:"count" json:"count"`
+	AvgValue float64     `db:"avg_value" json:"avg_value"`
+	MinValue interface{} `db:"min_value" json:"min_value"`
+	MaxValue interface{} `db:"max_value" json:"max_value"`
+}
+
+func (q *Queries) GetScoreAggregationByProjectID(ctx context.Context, projectID string) ([]GetScoreAggregationByProjectIDRow, error) {
+	rows, err := q.db.Query(ctx, getScoreAggregationByProjectID, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetScoreAggregationByProjectIDRow{}
+	for rows.Next() {
+		var i GetScoreAggregationByProjectIDRow
+		if err := rows.Scan(
+			&i.Name,
+			&i.Count,
+			&i.AvgValue,
+			&i.MinValue,
+			&i.MaxValue,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getScoreByID = `-- name: GetScoreByID :one
 SELECT id, trace_id, name, value, comment, source, user_id, created_at FROM scores WHERE id = $1
 `
@@ -1068,6 +1111,44 @@ func (q *Queries) GetScoresByTraceID(ctx context.Context, traceID string) ([]Sco
 	return items, nil
 }
 
+const getScoresByTraceIDAndName = `-- name: GetScoresByTraceIDAndName :many
+SELECT id, trace_id, name, value, comment, source, user_id, created_at FROM scores WHERE trace_id = $1 AND name = $2 ORDER BY created_at DESC
+`
+
+type GetScoresByTraceIDAndNameParams struct {
+	TraceID string `db:"trace_id" json:"trace_id"`
+	Name    string `db:"name" json:"name"`
+}
+
+func (q *Queries) GetScoresByTraceIDAndName(ctx context.Context, arg GetScoresByTraceIDAndNameParams) ([]Score, error) {
+	rows, err := q.db.Query(ctx, getScoresByTraceIDAndName, arg.TraceID, arg.Name)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Score{}
+	for rows.Next() {
+		var i Score
+		if err := rows.Scan(
+			&i.ID,
+			&i.TraceID,
+			&i.Name,
+			&i.Value,
+			&i.Comment,
+			&i.Source,
+			&i.UserID,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getTraceByID = `-- name: GetTraceByID :one
 SELECT id, project_id, name, input, output, metadata, user_id, session_id, tags, start_time, end_time, total_cost, token_usage, created_at FROM traces WHERE id = $1
 `
@@ -1090,6 +1171,140 @@ func (q *Queries) GetTraceByID(ctx context.Context, id string) (Trace, error) {
 		&i.TotalCost,
 		&i.TokenUsage,
 		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getTraceCostStatsByProjectID = `-- name: GetTraceCostStatsByProjectID :one
+SELECT
+  COUNT(*) as total_traces,
+  SUM(total_cost) as total_cost,
+  AVG(total_cost) as avg_cost,
+  MIN(total_cost) as min_cost,
+  MAX(total_cost) as max_cost
+FROM traces
+WHERE project_id = $1 AND total_cost IS NOT NULL
+`
+
+type GetTraceCostStatsByProjectIDRow struct {
+	TotalTraces int64       `db:"total_traces" json:"total_traces"`
+	TotalCost   int64       `db:"total_cost" json:"total_cost"`
+	AvgCost     float64     `db:"avg_cost" json:"avg_cost"`
+	MinCost     interface{} `db:"min_cost" json:"min_cost"`
+	MaxCost     interface{} `db:"max_cost" json:"max_cost"`
+}
+
+func (q *Queries) GetTraceCostStatsByProjectID(ctx context.Context, projectID string) (GetTraceCostStatsByProjectIDRow, error) {
+	row := q.db.QueryRow(ctx, getTraceCostStatsByProjectID, projectID)
+	var i GetTraceCostStatsByProjectIDRow
+	err := row.Scan(
+		&i.TotalTraces,
+		&i.TotalCost,
+		&i.AvgCost,
+		&i.MinCost,
+		&i.MaxCost,
+	)
+	return i, err
+}
+
+const getTraceCountByProjectIDAndTimeRange = `-- name: GetTraceCountByProjectIDAndTimeRange :one
+SELECT COUNT(*) as count
+FROM traces
+WHERE project_id = $1 AND start_time >= $2 AND start_time < $3
+`
+
+type GetTraceCountByProjectIDAndTimeRangeParams struct {
+	ProjectID   string             `db:"project_id" json:"project_id"`
+	StartTime   pgtype.Timestamptz `db:"start_time" json:"start_time"`
+	StartTime_2 pgtype.Timestamptz `db:"start_time_2" json:"start_time_2"`
+}
+
+func (q *Queries) GetTraceCountByProjectIDAndTimeRange(ctx context.Context, arg GetTraceCountByProjectIDAndTimeRangeParams) (int64, error) {
+	row := q.db.QueryRow(ctx, getTraceCountByProjectIDAndTimeRange, arg.ProjectID, arg.StartTime, arg.StartTime_2)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const getTraceErrorRateByProjectID = `-- name: GetTraceErrorRateByProjectID :one
+SELECT
+  COUNT(*) as total_traces,
+  COUNT(*) FILTER (WHERE EXISTS (
+    SELECT 1 FROM observations o WHERE o.trace_id = traces.id AND o.status = 'ERROR'
+  )) as error_traces
+FROM traces
+WHERE project_id = $1
+`
+
+type GetTraceErrorRateByProjectIDRow struct {
+	TotalTraces int64 `db:"total_traces" json:"total_traces"`
+	ErrorTraces int64 `db:"error_traces" json:"error_traces"`
+}
+
+func (q *Queries) GetTraceErrorRateByProjectID(ctx context.Context, projectID string) (GetTraceErrorRateByProjectIDRow, error) {
+	row := q.db.QueryRow(ctx, getTraceErrorRateByProjectID, projectID)
+	var i GetTraceErrorRateByProjectIDRow
+	err := row.Scan(&i.TotalTraces, &i.ErrorTraces)
+	return i, err
+}
+
+const getTraceLatencyStatsByProjectID = `-- name: GetTraceLatencyStatsByProjectID :one
+SELECT
+  COUNT(*) as total_traces,
+  AVG(EXTRACT(EPOCH FROM (end_time - start_time))) as avg_latency_seconds,
+  MIN(EXTRACT(EPOCH FROM (end_time - start_time))) as min_latency_seconds,
+  MAX(EXTRACT(EPOCH FROM (end_time - start_time))) as max_latency_seconds
+FROM traces
+WHERE project_id = $1 AND end_time IS NOT NULL AND start_time IS NOT NULL
+`
+
+type GetTraceLatencyStatsByProjectIDRow struct {
+	TotalTraces       int64       `db:"total_traces" json:"total_traces"`
+	AvgLatencySeconds float64     `db:"avg_latency_seconds" json:"avg_latency_seconds"`
+	MinLatencySeconds interface{} `db:"min_latency_seconds" json:"min_latency_seconds"`
+	MaxLatencySeconds interface{} `db:"max_latency_seconds" json:"max_latency_seconds"`
+}
+
+func (q *Queries) GetTraceLatencyStatsByProjectID(ctx context.Context, projectID string) (GetTraceLatencyStatsByProjectIDRow, error) {
+	row := q.db.QueryRow(ctx, getTraceLatencyStatsByProjectID, projectID)
+	var i GetTraceLatencyStatsByProjectIDRow
+	err := row.Scan(
+		&i.TotalTraces,
+		&i.AvgLatencySeconds,
+		&i.MinLatencySeconds,
+		&i.MaxLatencySeconds,
+	)
+	return i, err
+}
+
+const getTraceTokenUsageStatsByProjectID = `-- name: GetTraceTokenUsageStatsByProjectID :one
+SELECT
+  COUNT(*) as total_traces,
+  SUM((token_usage->>'total_tokens')::bigint) as total_tokens,
+  AVG((token_usage->>'total_tokens')::bigint) as avg_tokens,
+  SUM((token_usage->>'input_tokens')::bigint) as total_input_tokens,
+  SUM((token_usage->>'output_tokens')::bigint) as total_output_tokens
+FROM traces
+WHERE project_id = $1 AND token_usage IS NOT NULL
+`
+
+type GetTraceTokenUsageStatsByProjectIDRow struct {
+	TotalTraces       int64   `db:"total_traces" json:"total_traces"`
+	TotalTokens       int64   `db:"total_tokens" json:"total_tokens"`
+	AvgTokens         float64 `db:"avg_tokens" json:"avg_tokens"`
+	TotalInputTokens  int64   `db:"total_input_tokens" json:"total_input_tokens"`
+	TotalOutputTokens int64   `db:"total_output_tokens" json:"total_output_tokens"`
+}
+
+func (q *Queries) GetTraceTokenUsageStatsByProjectID(ctx context.Context, projectID string) (GetTraceTokenUsageStatsByProjectIDRow, error) {
+	row := q.db.QueryRow(ctx, getTraceTokenUsageStatsByProjectID, projectID)
+	var i GetTraceTokenUsageStatsByProjectIDRow
+	err := row.Scan(
+		&i.TotalTraces,
+		&i.TotalTokens,
+		&i.AvgTokens,
+		&i.TotalInputTokens,
+		&i.TotalOutputTokens,
 	)
 	return i, err
 }
@@ -1292,6 +1507,27 @@ type UpdatePromptActiveParams struct {
 
 func (q *Queries) UpdatePromptActive(ctx context.Context, arg UpdatePromptActiveParams) error {
 	_, err := q.db.Exec(ctx, updatePromptActive, arg.ProjectID, arg.Name, arg.IsActive)
+	return err
+}
+
+const updatePromptActiveByVersion = `-- name: UpdatePromptActiveByVersion :exec
+UPDATE prompts SET is_active = $3 WHERE project_id = $1 AND name = $2 AND version = $4
+`
+
+type UpdatePromptActiveByVersionParams struct {
+	ProjectID string `db:"project_id" json:"project_id"`
+	Name      string `db:"name" json:"name"`
+	IsActive  bool   `db:"is_active" json:"is_active"`
+	Version   int32  `db:"version" json:"version"`
+}
+
+func (q *Queries) UpdatePromptActiveByVersion(ctx context.Context, arg UpdatePromptActiveByVersionParams) error {
+	_, err := q.db.Exec(ctx, updatePromptActiveByVersion,
+		arg.ProjectID,
+		arg.Name,
+		arg.IsActive,
+		arg.Version,
+	)
 	return err
 }
 

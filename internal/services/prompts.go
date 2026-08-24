@@ -177,7 +177,7 @@ type SetPromptActiveRequest struct {
 
 // SetPromptActive sets a specific version of a prompt as active and deactivates others.
 func (s *PromptService) SetPromptActive(ctx context.Context, projectID, name string, version int32) error {
-	prompt, err := s.queries.GetPromptByNameAndVersion(ctx, db.GetPromptByNameAndVersionParams{
+	_, err := s.queries.GetPromptByNameAndVersion(ctx, db.GetPromptByNameAndVersionParams{
 		ProjectID: projectID,
 		Name:      name,
 		Version:   version,
@@ -195,7 +195,16 @@ func (s *PromptService) SetPromptActive(ctx context.Context, projectID, name str
 		return fmt.Errorf("deactivating prompts: %w", err)
 	}
 
-	_ = prompt
+	err = s.queries.UpdatePromptActiveByVersion(ctx, db.UpdatePromptActiveByVersionParams{
+		ProjectID: projectID,
+		Name:      name,
+		IsActive:  true,
+		Version:   version,
+	})
+	if err != nil {
+		return fmt.Errorf("activating prompt version: %w", err)
+	}
+
 	return nil
 }
 

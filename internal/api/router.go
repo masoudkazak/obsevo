@@ -12,23 +12,25 @@ import (
 
 // Router holds all handlers and configures the API routes.
 type Router struct {
-	queries        *db.Queries
-	jwtService     *auth.JWTService
-	authHandler    *AuthHandler
-	projectHandler *ProjectHandler
-	traceHandler   *TraceHandler
-	promptHandler  *PromptHandler
+	queries           *db.Queries
+	jwtService        *auth.JWTService
+	authHandler       *AuthHandler
+	projectHandler    *ProjectHandler
+	traceHandler      *TraceHandler
+	promptHandler     *PromptHandler
+	evaluationHandler *EvaluationHandler
 }
 
 // NewRouter creates a new API router with all handlers.
-func NewRouter(queries *db.Queries, jwtService *auth.JWTService, traceHandler *TraceHandler, promptHandler *PromptHandler) *Router {
+func NewRouter(queries *db.Queries, jwtService *auth.JWTService, traceHandler *TraceHandler, promptHandler *PromptHandler, evaluationHandler *EvaluationHandler) *Router {
 	return &Router{
-		queries:        queries,
-		jwtService:     jwtService,
-		authHandler:    NewAuthHandler(queries, jwtService),
-		projectHandler: NewProjectHandler(queries),
-		traceHandler:   traceHandler,
-		promptHandler:  promptHandler,
+		queries:           queries,
+		jwtService:        jwtService,
+		authHandler:       NewAuthHandler(queries, jwtService),
+		projectHandler:    NewProjectHandler(queries),
+		traceHandler:      traceHandler,
+		promptHandler:     promptHandler,
+		evaluationHandler: evaluationHandler,
 	}
 }
 
@@ -57,6 +59,9 @@ func (rt *Router) RegisterRoutes(r chi.Router) {
 
 			// Prompt routes
 			r.Route("/", rt.promptHandler.RegisterRoutes)
+
+			// Evaluation and analytics routes
+			r.Route("/", rt.evaluationHandler.RegisterRoutes)
 		})
 	})
 }

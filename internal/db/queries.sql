@@ -140,6 +140,9 @@ RETURNING *;
 -- name: UpdatePromptActive :exec
 UPDATE prompts SET is_active = $3 WHERE project_id = $1 AND name = $2;
 
+-- name: UpdatePromptActiveByVersion :exec
+UPDATE prompts SET is_active = $3 WHERE project_id = $1 AND name = $2 AND version = $4;
+
 -- name: GetScoreByID :one
 SELECT * FROM scores WHERE id = $1;
 
@@ -150,6 +153,17 @@ SELECT * FROM scores WHERE trace_id = $1 ORDER BY created_at DESC;
 INSERT INTO scores (trace_id, name, value, comment, source, user_id)
 VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING *;
+
+-- name: GetScoresByTraceIDAndName :many
+SELECT * FROM scores WHERE trace_id = $1 AND name = $2 ORDER BY created_at DESC;
+
+-- name: GetScoreAggregationByProjectID :many
+SELECT s.name, COUNT(*) as count, AVG(s.value) as avg_value, MIN(s.value) as min_value, MAX(s.value) as max_value
+FROM scores s
+JOIN traces t ON t.id = s.trace_id
+WHERE t.project_id = $1
+GROUP BY s.name
+ORDER BY s.name;
 
 -- name: GetDatasetByID :one
 SELECT * FROM datasets WHERE id = $1;
@@ -183,6 +197,49 @@ SELECT * FROM dataset_runs WHERE dataset_id = $1 ORDER BY created_at DESC;
 INSERT INTO dataset_runs (dataset_id, name)
 VALUES ($1, $2)
 RETURNING *;
+
+-- name: GetTraceLatencyStatsByProjectID :one
+SELECT
+  COUNT(*) as total_traces,
+  AVG(EXTRACT(EPOCH FROM (end_time - start_time))) as avg_latency_seconds,
+  MIN(EXTRACT(EPOCH FROM (end_time - start_time))) as min_latency_seconds,
+  MAX(EXTRACT(EPOCH FROM (end_time - start_time))) as max_latency_seconds
+FROM traces
+WHERE project_id = $1 AND end_time IS NOT NULL AND start_time IS NOT NULL;
+
+-- name: GetTraceCostStatsByProjectID :one
+SELECT
+  COUNT(*) as total_traces,
+  SUM(total_cost) as total_cost,
+  AVG(total_cost) as avg_cost,
+  MIN(total_cost) as min_cost,
+  MAX(total_cost) as max_cost
+FROM traces
+WHERE project_id = $1 AND total_cost IS NOT NULL;
+
+-- name: GetTraceTokenUsageStatsByProjectID :one
+SELECT
+  COUNT(*) as total_traces,
+  SUM((token_usage->>'total_tokens')::bigint) as total_tokens,
+  AVG((token_usage->>'total_tokens')::bigint) as avg_tokens,
+  SUM((token_usage->>'input_tokens')::bigint) as total_input_tokens,
+  SUM((token_usage->>'output_tokens')::bigint) as total_output_tokens
+FROM traces
+WHERE project_id = $1 AND token_usage IS NOT NULL;
+
+-- name: GetTraceErrorRateByProjectID :one
+SELECT
+  COUNT(*) as total_traces,
+  COUNT(*) FILTER (WHERE EXISTS (
+    SELECT 1 FROM observations o WHERE o.trace_id = traces.id AND o.status = 'ERROR'
+  )) as error_traces
+FROM traces
+WHERE project_id = $1;
+
+-- name: GetTraceCountByProjectIDAndTimeRange :one
+SELECT COUNT(*) as count
+FROM traces
+WHERE project_id = $1 AND start_time >= $2 AND start_time < $3;
 
 -- name: GetDatasetRunItemByID :one
 SELECT * FROM dataset_run_items WHERE id = $1;
