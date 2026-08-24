@@ -1,0 +1,47 @@
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Go
+bin/
+*.exe
+*.test
+*.out
+coverage.out
+coverage.html
+
+# Node (web/)
+web/node_modules
+web/.svelte-kit
+web/build
+web/.output
+
+# Docker
+docker-compose.yml
+Dockerfile
+.dockerignore
+
+# Documentation
+*.md
+docs/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Misc
+.golangci.yml
+.opencode/
+notes.md
+NOTES.md

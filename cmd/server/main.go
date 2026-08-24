@@ -90,7 +90,7 @@ func main() {
 	r.Use(middleware.Timeout(30 * time.Second))
 
 	// Register all routes
-	apiRouter := api.NewRouter(queries, jwtService, traceHandler, promptHandler, evalHandler, datasetHandler)
+	apiRouter := api.NewRouter(queries, pool, jwtService, traceHandler, promptHandler, evalHandler, datasetHandler)
 	apiRouter.RegisterRoutes(r)
 
 	// Start server

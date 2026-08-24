@@ -11,7 +11,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-langfuse}
       POSTGRES_DB: ${POSTGRES_DB:-langfuse_light}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -19,6 +19,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 256M
 
   # Redis
   redis:
@@ -26,7 +30,7 @@ services:
     container_name: langfuse-redis
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -34,6 +38,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 128M
 
   # Go API Server
   api:
@@ -43,19 +51,29 @@ services:
     container_name: langfuse-api
     restart: unless-stopped
     ports:
-      - "3001:3001"
+      - "${APP_PORT:-3001}:3001"
     environment:
-      APP_ENV: ${APP_ENV:-development}
+      APP_ENV: ${APP_ENV:-production}
       APP_PORT: 3001
       DATABASE_URL: postgres://${POSTGRES_USER:-langfuse}:${POSTGRES_PASSWORD:-langfuse}@postgres:5432/${POSTGRES_DB:-langfuse_light}?sslmode=disable
       REDIS_URL: redis://redis:6379
-      JWT_SECRET: ${JWT_SECRET:-your-jwt-secret-change-in-production}
-      APP_SECRET_KEY: ${APP_SECRET_KEY:-your-secret-key-change-in-production}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      APP_SECRET_KEY: ${APP_SECRET_KEY:?Set APP_SECRET_KEY in .env}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 256M
 
 volumes:
   postgres_data:

@@ -1,10 +1,12 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/langfuse-light/langfuse-light/internal/auth"
 	"github.com/langfuse-light/langfuse-light/internal/db"
@@ -13,6 +15,7 @@ import (
 // Router holds all handlers and configures the API routes.
 type Router struct {
 	queries           *db.Queries
+	dbPool            *pgxpool.Pool
 	jwtService        *auth.JWTService
 	authHandler       *AuthHandler
 	projectHandler    *ProjectHandler
@@ -25,9 +28,10 @@ type Router struct {
 }
 
 // NewRouter creates a new API router with all handlers.
-func NewRouter(queries *db.Queries, jwtService *auth.JWTService, traceHandler *TraceHandler, promptHandler *PromptHandler, evaluationHandler *EvaluationHandler, datasetHandler *DatasetHandler) *Router {
+func NewRouter(queries *db.Queries, dbPool *pgxpool.Pool, jwtService *auth.JWTService, traceHandler *TraceHandler, promptHandler *PromptHandler, evaluationHandler *EvaluationHandler, datasetHandler *DatasetHandler) *Router {
 	return &Router{
 		queries:           queries,
+		dbPool:            dbPool,
 		jwtService:        jwtService,
 		authHandler:       NewAuthHandler(queries, jwtService),
 		projectHandler:    NewProjectHandler(queries),
@@ -42,10 +46,23 @@ func NewRouter(queries *db.Queries, jwtService *auth.JWTService, traceHandler *T
 
 // RegisterRoutes registers all API routes on the given chi.Router.
 func (rt *Router) RegisterRoutes(r chi.Router) {
-	// Health check
+	// Health check — verifies DB connectivity
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.Background()
+		status := "ok"
+		code := http.StatusOK
+
+		if err := rt.dbPool.Ping(ctx); err != nil {
+			status = "degraded"
+			code = http.StatusServiceUnavailable
+		}
+
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		w.WriteHeader(code)
+		json.NewEncoder(w).Encode(map[string]string{
+			"status":  status,
+			"service": "langfuse-light",
+		})
 	})
 
 	// API routes

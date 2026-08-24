@@ -65,6 +65,15 @@
   - Created OpenAPI 3.0 specification: docs/openapi.yaml — full API reference
   - Removed unused uuid import from projects.go
   - Installed Go 1.22.5 locally, all checks pass: gofmt clean, go vet clean, go build clean, go test 3/3 packages pass
+- [2026-08-24] Phase 10: Deployment & Finalization implemented
+  - Docker optimization: multi-stage build with `-ldflags="-w -s"` for smaller binary, .dockerignore, non-root user, HEALTHCHECK directive
+  - docker-compose.yml: API health check, resource limits (postgres 256M, redis 128M, api 256M), configurable ports, required env vars
+  - Health endpoint now verifies DB connectivity via `dbPool.Ping()` — returns `{"status":"degraded"}` on failure
+  - Router signature updated: `NewRouter` now accepts `*pgxpool.Pool` parameter
+  - Deployment documentation: docs/deployment.md — quick start, env var reference, architecture diagram, production checklist, nginx config, backup/restore, scaling notes
+  - Updated .env.example with detailed documentation, required var markers, production defaults
+  - Performance: new migration 002_add_indexes — 7 indexes for hot query paths (prompts, scores, datasets, observations, traces)
+  - All checks pass: gofmt clean, go vet clean, go build clean, go test 3/3 packages pass
 
 ## Decisions made (don't re-decide these)
 - Router: Chi (chosen in Phase 1)
@@ -126,6 +135,17 @@
 - tests/auth/password_test.go — new file, bcrypt hashing tests
 - tests/api/handlers_test.go — new file, API handler validation tests
 - docs/openapi.yaml — new file, OpenAPI 3.0 specification
+
+## Phase 10 Files Changed
+- Dockerfile — optimized multi-stage build with ldflags, non-root user, HEALTHCHECK
+- docker-compose.yml — API health check, resource limits, configurable ports, required env vars
+- .dockerignore — new file, excludes .git, node_modules, docs, etc.
+- internal/api/router.go — health endpoint checks DB connectivity, Router accepts *pgxpool.Pool
+- cmd/server/main.go — passes pool to NewRouter
+- docs/deployment.md — new file, deployment guide
+- .env.example — updated with documentation and production defaults
+- migrations/002_add_indexes.up.sql — new file, 7 performance indexes
+- migrations/002_add_indexes.down.sql — new file, rollback indexes
 
 ## Known limitations (intentional, per AGENTS.md)
 - no ClickHouse, no S3, single worker, etc.
