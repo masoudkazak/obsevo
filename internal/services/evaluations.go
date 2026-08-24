@@ -20,6 +20,46 @@ func NewEvaluationService(queries *db.Queries) *EvaluationService {
 	return &EvaluationService{queries: queries}
 }
 
+// toFloat64 converts an interface{} to float64, returning 0 for nil or unsupported types.
+func toFloat64(v interface{}) float64 {
+	if v == nil {
+		return 0
+	}
+	switch val := v.(type) {
+	case float64:
+		return val
+	case float32:
+		return float64(val)
+	case int64:
+		return float64(val)
+	case int32:
+		return float64(val)
+	case int:
+		return float64(val)
+	}
+	return 0
+}
+
+// toInt64 converts an interface{} to int64, returning 0 for nil or unsupported types.
+func toInt64(v interface{}) int64 {
+	if v == nil {
+		return 0
+	}
+	switch val := v.(type) {
+	case int64:
+		return val
+	case int32:
+		return int64(val)
+	case int:
+		return int64(val)
+	case float64:
+		return int64(val)
+	case float32:
+		return int64(val)
+	}
+	return 0
+}
+
 // CreateScoreRequest is the request body for creating a score.
 type CreateScoreRequest struct {
 	TraceID string  `json:"trace_id"`
@@ -140,20 +180,11 @@ func (s *EvaluationService) GetLatencyStats(ctx context.Context, projectID strin
 		return LatencyStats{}, fmt.Errorf("getting latency stats: %w", err)
 	}
 
-	minLat := 0.0
-	maxLat := 0.0
-	if v, ok := row.MinLatencySeconds.(float64); ok {
-		minLat = v
-	}
-	if v, ok := row.MaxLatencySeconds.(float64); ok {
-		maxLat = v
-	}
-
 	return LatencyStats{
 		TotalTraces:       row.TotalTraces,
-		AvgLatencySeconds: row.AvgLatencySeconds,
-		MinLatencySeconds: minLat,
-		MaxLatencySeconds: maxLat,
+		AvgLatencySeconds: toFloat64(row.AvgLatencySeconds),
+		MinLatencySeconds: toFloat64(row.MinLatencySeconds),
+		MaxLatencySeconds: toFloat64(row.MaxLatencySeconds),
 	}, nil
 }
 
@@ -173,21 +204,12 @@ func (s *EvaluationService) GetCostStats(ctx context.Context, projectID string) 
 		return CostStats{}, fmt.Errorf("getting cost stats: %w", err)
 	}
 
-	minCost := 0.0
-	maxCost := 0.0
-	if v, ok := row.MinCost.(float64); ok {
-		minCost = v
-	}
-	if v, ok := row.MaxCost.(float64); ok {
-		maxCost = v
-	}
-
 	return CostStats{
 		TotalTraces: row.TotalTraces,
-		TotalCost:   float64(row.TotalCost),
-		AvgCost:     row.AvgCost,
-		MinCost:     minCost,
-		MaxCost:     maxCost,
+		TotalCost:   toFloat64(row.TotalCost),
+		AvgCost:     toFloat64(row.AvgCost),
+		MinCost:     toFloat64(row.MinCost),
+		MaxCost:     toFloat64(row.MaxCost),
 	}, nil
 }
 
@@ -209,10 +231,10 @@ func (s *EvaluationService) GetTokenUsageStats(ctx context.Context, projectID st
 
 	return TokenUsageStats{
 		TotalTraces:       row.TotalTraces,
-		TotalTokens:       row.TotalTokens,
-		AvgTokens:         row.AvgTokens,
-		TotalInputTokens:  row.TotalInputTokens,
-		TotalOutputTokens: row.TotalOutputTokens,
+		TotalTokens:       toInt64(row.TotalTokens),
+		AvgTokens:         toFloat64(row.AvgTokens),
+		TotalInputTokens:  toInt64(row.TotalInputTokens),
+		TotalOutputTokens: toInt64(row.TotalOutputTokens),
 	}, nil
 }
 

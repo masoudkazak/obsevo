@@ -7,6 +7,7 @@
 
 	let { children } = $props();
 	let sidebarOpen = $state(true);
+	let projectsLoaded = $state(false);
 
 	$effect(() => {
 		if (!$isAuthenticated) {
@@ -15,7 +16,8 @@
 	});
 
 	$effect(() => {
-		if ($isAuthenticated && $projects.length === 0) {
+		if ($isAuthenticated && !projectsLoaded) {
+			projectsLoaded = true;
 			api.projects.list().then((p) => {
 				projects.set(p);
 				if (p.length > 0 && !$currentProject) {

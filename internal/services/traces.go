@@ -47,6 +47,7 @@ func (s *TraceService) CreateTrace(ctx context.Context, projectID string, req Cr
 	endTime := parseTime(req.EndTime)
 
 	trace, err := s.queries.CreateTrace(ctx, db.CreateTraceParams{
+		ID:         req.ID,
 		ProjectID:  projectID,
 		Name:       pgtype.Text{String: req.Name, Valid: req.Name != ""},
 		Input:      req.Input,

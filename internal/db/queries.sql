@@ -89,8 +89,8 @@ JOIN projects p ON p.id = t.project_id
 WHERE t.id = $1;
 
 -- name: CreateTrace :one
-INSERT INTO traces (project_id, name, input, output, metadata, user_id, session_id, tags, start_time, end_time, total_cost, token_usage)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+INSERT INTO traces (id, project_id, name, input, output, metadata, user_id, session_id, tags, start_time, end_time, total_cost, token_usage)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 RETURNING *;
 
 -- name: UpdateTrace :one
@@ -201,29 +201,29 @@ RETURNING *;
 -- name: GetTraceLatencyStatsByProjectID :one
 SELECT
   COUNT(*) as total_traces,
-  AVG(EXTRACT(EPOCH FROM (end_time - start_time))) as avg_latency_seconds,
-  MIN(EXTRACT(EPOCH FROM (end_time - start_time))) as min_latency_seconds,
-  MAX(EXTRACT(EPOCH FROM (end_time - start_time))) as max_latency_seconds
+  COALESCE(AVG(EXTRACT(EPOCH FROM (end_time - start_time))), 0) as avg_latency_seconds,
+  COALESCE(MIN(EXTRACT(EPOCH FROM (end_time - start_time))), 0) as min_latency_seconds,
+  COALESCE(MAX(EXTRACT(EPOCH FROM (end_time - start_time))), 0) as max_latency_seconds
 FROM traces
 WHERE project_id = $1 AND end_time IS NOT NULL AND start_time IS NOT NULL;
 
 -- name: GetTraceCostStatsByProjectID :one
 SELECT
   COUNT(*) as total_traces,
-  SUM(total_cost) as total_cost,
-  AVG(total_cost) as avg_cost,
-  MIN(total_cost) as min_cost,
-  MAX(total_cost) as max_cost
+  COALESCE(SUM(total_cost), 0) as total_cost,
+  COALESCE(AVG(total_cost), 0) as avg_cost,
+  COALESCE(MIN(total_cost), 0) as min_cost,
+  COALESCE(MAX(total_cost), 0) as max_cost
 FROM traces
 WHERE project_id = $1 AND total_cost IS NOT NULL;
 
 -- name: GetTraceTokenUsageStatsByProjectID :one
 SELECT
   COUNT(*) as total_traces,
-  SUM((token_usage->>'total_tokens')::bigint) as total_tokens,
-  AVG((token_usage->>'total_tokens')::bigint) as avg_tokens,
-  SUM((token_usage->>'input_tokens')::bigint) as total_input_tokens,
-  SUM((token_usage->>'output_tokens')::bigint) as total_output_tokens
+  COALESCE(SUM((token_usage->>'total_tokens')::bigint), 0) as total_tokens,
+  COALESCE(AVG((token_usage->>'total_tokens')::bigint), 0) as avg_tokens,
+  COALESCE(SUM((token_usage->>'input_tokens')::bigint), 0) as total_input_tokens,
+  COALESCE(SUM((token_usage->>'output_tokens')::bigint), 0) as total_output_tokens
 FROM traces
 WHERE project_id = $1 AND token_usage IS NOT NULL;
 
