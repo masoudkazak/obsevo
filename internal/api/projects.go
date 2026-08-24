@@ -6,7 +6,6 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
 
 	"github.com/langfuse-light/langfuse-light/internal/auth"
 	"github.com/langfuse-light/langfuse-light/internal/db"
@@ -90,11 +89,22 @@ func (h *ProjectHandler) CreateOrganization(w http.ResponseWriter, r *http.Reque
 func (h *ProjectHandler) ListOrganizations(w http.ResponseWriter, r *http.Request) {
 	userID := auth.GetUserID(r.Context())
 
-	// For now, return empty list - implement proper query later
-	writeJSON(w, http.StatusOK, []Organization{
-		{ID: uuid.New().String(), Name: "Default Org", CreatedAt: "2024-01-01"},
-	})
-	_ = userID
+	orgs, err := h.queries.GetOrganizationsByUserID(r.Context(), userID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list organizations: "+err.Error())
+		return
+	}
+
+	result := make([]Organization, len(orgs))
+	for i, o := range orgs {
+		result[i] = Organization{
+			ID:        o.ID,
+			Name:      o.Name,
+			CreatedAt: o.CreatedAt.Time.String(),
+		}
+	}
+
+	writeJSON(w, http.StatusOK, result)
 }
 
 // CreateProject creates a new project
@@ -110,10 +120,15 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// For now, use a default org ID - implement proper org lookup later
-	orgID := uuid.New().String()
+	userID := auth.GetUserID(r.Context())
+	orgs, err := h.queries.GetOrganizationsByUserID(r.Context(), userID)
+	if err != nil || len(orgs) == 0 {
+		writeError(w, http.StatusBadRequest, "user must belong to an organization first")
+		return
+	}
 
-	// Create project
+	orgID := orgs[0].ID
+
 	project, err := h.queries.CreateProject(context.Background(), db.CreateProjectParams{
 		Name:  req.Name,
 		OrgID: orgID,
@@ -133,8 +148,35 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 
 // ListProjects lists projects for the current user
 func (h *ProjectHandler) ListProjects(w http.ResponseWriter, r *http.Request) {
-	// For now, return empty list - implement proper query later
-	writeJSON(w, http.StatusOK, []Project{})
+	userID := auth.GetUserID(r.Context())
+
+	orgs, err := h.queries.GetOrganizationsByUserID(r.Context(), userID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list organizations: "+err.Error())
+		return
+	}
+
+	var allProjects []Project
+	for _, org := range orgs {
+		projects, err := h.queries.GetProjectsByOrgID(r.Context(), org.ID)
+		if err != nil {
+			continue
+		}
+		for _, p := range projects {
+			allProjects = append(allProjects, Project{
+				ID:        p.ID,
+				Name:      p.Name,
+				OrgID:     p.OrgID,
+				CreatedAt: p.CreatedAt.Time.String(),
+			})
+		}
+	}
+
+	if allProjects == nil {
+		allProjects = []Project{}
+	}
+
+	writeJSON(w, http.StatusOK, allProjects)
 }
 
 // RegisterRoutes registers project routes

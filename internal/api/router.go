@@ -21,6 +21,7 @@ type Router struct {
 	evaluationHandler *EvaluationHandler
 	datasetHandler    *DatasetHandler
 	settingsHandler   *SettingsHandler
+	sdkHandler        *SDKHandler
 }
 
 // NewRouter creates a new API router with all handlers.
@@ -35,6 +36,7 @@ func NewRouter(queries *db.Queries, jwtService *auth.JWTService, traceHandler *T
 		evaluationHandler: evaluationHandler,
 		datasetHandler:    datasetHandler,
 		settingsHandler:   NewSettingsHandler(queries),
+		sdkHandler:        NewSDKHandler(traceHandler.traceService),
 	}
 }
 
@@ -72,6 +74,12 @@ func (rt *Router) RegisterRoutes(r chi.Router) {
 
 			// Settings and management routes
 			r.Route("/", rt.settingsHandler.RegisterRoutes)
+		})
+
+		// SDK-compatible routes (API key auth)
+		r.Route("/public", func(r chi.Router) {
+			r.Use(auth.APIKeyMiddleware(rt.queries))
+			r.Route("/", rt.sdkHandler.RegisterSDKRoutes)
 		})
 	})
 }

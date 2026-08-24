@@ -1,0 +1,1373 @@
+openapi: 3.0.3
+info:
+  title: Langfuse Light API
+  description: |
+    Lightweight open-source LLM observability platform — API reference.
+    Compatible with Langfuse Python/JS SDKs via the `/api/public` endpoints.
+  version: 1.0.0
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:3001
+    description: Local development
+
+security:
+  - BearerAuth: []
+
+tags:
+  - name: Auth
+    description: User registration and login
+  - name: Organizations
+    description: Organization management
+  - name: Projects
+    description: Project management
+  - name: Traces
+    description: Trace ingestion and querying
+  - name: Observations
+    description: Observation (span/generation/event) management
+  - name: Prompts
+    description: Prompt versioning and management
+  - name: Scores
+    description: Evaluation scores
+  - name: Analytics
+    description: Usage and performance analytics
+  - name: Datasets
+    description: Dataset management and batch evaluation
+  - name: Settings
+    description: API keys, members, and profile management
+  - name: SDK
+    description: Langfuse SDK-compatible ingestion endpoints (API key auth)
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      tags: [Auth]
+      security: []
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /api/auth/register:
+    post:
+      summary: Register a new user
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  minLength: 6
+                name:
+                  type: string
+      responses:
+        '201':
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '409':
+          description: User already exists
+
+  /api/auth/login:
+    post:
+      summary: Login
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: Invalid credentials
+
+  /api/organizations:
+    post:
+      summary: Create organization
+      tags: [Organizations]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+      responses:
+        '201':
+          description: Organization created
+    get:
+      summary: List user's organizations
+      tags: [Organizations]
+      responses:
+        '200':
+          description: List of organizations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Organization'
+
+  /api/projects:
+    post:
+      summary: Create project
+      tags: [Projects]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+      responses:
+        '201':
+          description: Project created
+    get:
+      summary: List user's projects
+      tags: [Projects]
+      responses:
+        '200':
+          description: List of projects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Project'
+
+  /api/traces:
+    post:
+      summary: Create or update a trace
+      tags: [Traces]
+      parameters:
+        - name: project_id
+          in: query
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTraceBody'
+      responses:
+        '201':
+          description: Trace created
+    get:
+      summary: List traces
+      tags: [Traces]
+      parameters:
+        - name: project_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: name
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Paginated trace list
+
+  /api/traces/{id}:
+    get:
+      summary: Get trace with observations
+      tags: [Traces]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Trace detail with observations
+
+  /api/observations:
+    post:
+      summary: Create an observation
+      tags: [Observations]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateObservationBody'
+      responses:
+        '201':
+          description: Observation created
+
+  /api/observations/{id}:
+    get:
+      summary: Get observation by ID
+      tags: [Observations]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Observation detail
+
+  /api/ingestion:
+    post:
+      summary: Batch ingestion (traces + observations)
+      tags: [Traces]
+      parameters:
+        - name: project_id
+          in: query
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                traces:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/CreateTraceBody'
+                observations:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/CreateObservationBody'
+      responses:
+        '201':
+          description: Ingestion result
+
+  /api/prompts:
+    post:
+      summary: Create a prompt
+      tags: [Prompts]
+      parameters:
+        - name: project_id
+          in: query
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePromptBody'
+      responses:
+        '201':
+          description: Prompt created
+    get:
+      summary: List prompts
+      tags: [Prompts]
+      parameters:
+        - name: project_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of prompts
+
+  /api/prompts/{name}:
+    get:
+      summary: Get active prompt by name
+      tags: [Prompts]
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: project_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Prompt with template info
+    put:
+      summary: Create a new prompt version
+      tags: [Prompts]
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: project_id
+          in: query
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [prompt]
+              properties:
+                prompt:
+                  type: string
+                config:
+                  type: object
+                is_active:
+                  type: boolean
+      responses:
+        '201':
+          description: New version created
+
+  /api/prompts/{name}/versions:
+    get:
+      summary: List prompt versions
+      tags: [Prompts]
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: project_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of prompt versions
+
+  /api/prompts/{name}/active:
+    post:
+      summary: Set active prompt version
+      tags: [Prompts]
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: project_id
+          in: query
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version]
+              properties:
+                version:
+                  type: integer
+      responses:
+        '200':
+          description: Active version updated
+
+  /api/scores:
+    post:
+      summary: Create a score
+      tags: [Scores]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateScoreBody'
+      responses:
+        '201':
+          description: Score created
+
+  /api/scores/{id}:
+    get:
+      summary: Get score by ID
+      tags: [Scores]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Score detail
+
+  /api/scores/aggregation:
+    get:
+      summary: Get score aggregations
+      tags: [Scores]
+      parameters:
+        - name: project_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Aggregated score statistics
+
+  /api/traces/{id}/scores:
+    get:
+      summary: List scores for a trace
+      tags: [Scores]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: name
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of scores
+
+  /api/analytics:
+    get:
+      summary: Full analytics summary
+      tags: [Analytics]
+      parameters:
+        - name: project_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Analytics summary (latency, cost, tokens, errors, scores)
+
+  /api/analytics/latency:
+    get:
+      summary: Latency statistics
+      tags: [Analytics]
+      parameters:
+        - name: project_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Latency stats
+
+  /api/analytics/cost:
+    get:
+      summary: Cost statistics
+      tags: [Analytics]
+      parameters:
+        - name: project_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Cost stats
+
+  /api/analytics/tokens:
+    get:
+      summary: Token usage statistics
+      tags: [Analytics]
+      parameters:
+        - name: project_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Token usage stats
+
+  /api/analytics/errors:
+    get:
+      summary: Error rate statistics
+      tags: [Analytics]
+      parameters:
+        - name: project_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Error rate stats
+
+  /api/analytics/cost-over-time:
+    get:
+      summary: Cost over time
+      tags: [Analytics]
+      parameters:
+        - name: project_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: days
+          in: query
+          schema:
+            type: integer
+            default: 30
+      responses:
+        '200':
+          description: Daily cost data
+
+  /api/analytics/latency-over-time:
+    get:
+      summary: Latency over time
+      tags: [Analytics]
+      parameters:
+        - name: project_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: days
+          in: query
+          schema:
+            type: integer
+            default: 30
+      responses:
+        '200':
+          description: Daily latency data
+
+  /api/analytics/tokens-over-time:
+    get:
+      summary: Token usage over time
+      tags: [Analytics]
+      parameters:
+        - name: project_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: days
+          in: query
+          schema:
+            type: integer
+            default: 30
+      responses:
+        '200':
+          description: Daily token usage data
+
+  /api/analytics/traces-over-time:
+    get:
+      summary: Trace count over time
+      tags: [Analytics]
+      parameters:
+        - name: project_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: days
+          in: query
+          schema:
+            type: integer
+            default: 30
+      responses:
+        '200':
+          description: Daily trace count data
+
+  /api/datasets:
+    post:
+      summary: Create dataset
+      tags: [Datasets]
+      parameters:
+        - name: project_id
+          in: query
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+      responses:
+        '201':
+          description: Dataset created
+    get:
+      summary: List datasets
+      tags: [Datasets]
+      parameters:
+        - name: project_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of datasets
+
+  /api/datasets/{id}:
+    get:
+      summary: Get dataset
+      tags: [Datasets]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Dataset detail
+    delete:
+      summary: Delete dataset
+      tags: [Datasets]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Dataset deleted
+
+  /api/datasets/{id}/items:
+    post:
+      summary: Add dataset item
+      tags: [Datasets]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [input]
+              properties:
+                input:
+                  type: object
+                expected_output:
+                  type: object
+                metadata:
+                  type: object
+                source_trace_id:
+                  type: string
+      responses:
+        '201':
+          description: Item added
+    get:
+      summary: List dataset items
+      tags: [Datasets]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of dataset items
+
+  /api/datasets/{id}/import:
+    post:
+      summary: Import dataset items (JSON or CSV)
+      tags: [Datasets]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: object
+                properties:
+                  input:
+                    type: object
+                  expected_output:
+                    type: object
+          text/csv:
+            schema:
+              type: string
+      responses:
+        '201':
+          description: Items imported
+
+  /api/datasets/{id}/export:
+    get:
+      summary: Export dataset items
+      tags: [Datasets]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [json, csv]
+            default: json
+      responses:
+        '200':
+          description: Exported items
+
+  /api/datasets/{id}/runs:
+    post:
+      summary: Create dataset run
+      tags: [Datasets]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+      responses:
+        '201':
+          description: Run created
+    get:
+      summary: List dataset runs
+      tags: [Datasets]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of runs
+
+  /api/datasets/{id}/runs/{runId}:
+    get:
+      summary: Get dataset run
+      tags: [Datasets]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Run detail
+
+  /api/datasets/{id}/runs/{runId}/items:
+    post:
+      summary: Add run item
+      tags: [Datasets]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [dataset_item_id]
+              properties:
+                dataset_item_id:
+                  type: string
+                observation_id:
+                  type: string
+                score_id:
+                  type: string
+      responses:
+        '201':
+          description: Run item added
+    get:
+      summary: List run items
+      tags: [Datasets]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of run items
+
+  /api/datasets/{id}/runs/{runId}/export:
+    get:
+      summary: Export run results
+      tags: [Datasets]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [json, csv]
+            default: json
+      responses:
+        '200':
+          description: Exported run results
+
+  /api/api-keys:
+    get:
+      summary: List API keys
+      tags: [Settings]
+      parameters:
+        - name: project_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of API keys
+    post:
+      summary: Create API key
+      tags: [Settings]
+      parameters:
+        - name: project_id
+          in: query
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+      responses:
+        '201':
+          description: API key created
+
+  /api/api-keys/{id}:
+    delete:
+      summary: Delete API key
+      tags: [Settings]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: project_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: API key deleted
+
+  /api/members:
+    get:
+      summary: List organization members
+      tags: [Settings]
+      parameters:
+        - name: org_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of members
+
+  /api/members/{userId}/role:
+    put:
+      summary: Update member role
+      tags: [Settings]
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: org_id
+          in: query
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role]
+              properties:
+                role:
+                  type: string
+                  enum: [VIEWER, EDITOR, ADMIN]
+      responses:
+        '200':
+          description: Role updated
+
+  /api/members/{userId}:
+    delete:
+      summary: Remove member
+      tags: [Settings]
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: org_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Member removed
+
+  /api/profile:
+    get:
+      summary: Get user profile
+      tags: [Settings]
+      responses:
+        '200':
+          description: User profile
+    put:
+      summary: Update user profile
+      tags: [Settings]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+      responses:
+        '200':
+          description: Profile updated
+
+  # SDK-compatible endpoints (API key auth)
+  /api/public/traces:
+    post:
+      summary: Create trace (SDK-compatible)
+      tags: [SDK]
+      security:
+        - APIKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SDKCreateTraceBody'
+      responses:
+        '201':
+          description: Trace created
+    get:
+      summary: List traces (SDK-compatible)
+      tags: [SDK]
+      security:
+        - APIKeyAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: name
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of traces
+
+  /api/public/traces/{traceId}:
+    get:
+      summary: Get trace (SDK-compatible)
+      tags: [SDK]
+      security:
+        - APIKeyAuth: []
+      parameters:
+        - name: traceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Trace with observations
+
+  /api/public/observations:
+    post:
+      summary: Create observation (SDK-compatible)
+      tags: [SDK]
+      security:
+        - APIKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SDKCreateObservationBody'
+      responses:
+        '201':
+          description: Observation created
+
+  /api/public/ingestion:
+    post:
+      summary: Batch ingestion (SDK-compatible)
+      tags: [SDK]
+      security:
+        - APIKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                batch:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                      type:
+                        type: string
+                        enum: [trace-create, trace-update, observation-create]
+                      timestamp:
+                        type: string
+                        format: date-time
+                      body:
+                        type: object
+      responses:
+        '200':
+          description: Batch result with successes and errors
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    APIKeyAuth:
+      type: apiKey
+      in: header
+      name: x-api-key
+
+  schemas:
+    AuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        user:
+          type: object
+          properties:
+            id:
+              type: string
+            email:
+              type: string
+            name:
+              type: string
+
+    Organization:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        created_at:
+          type: string
+
+    Project:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        org_id:
+          type: string
+        created_at:
+          type: string
+
+    CreateTraceBody:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        input:
+          type: object
+        output:
+          type: object
+        metadata:
+          type: object
+        user_id:
+          type: string
+        session_id:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+        total_cost:
+          type: number
+        token_usage:
+          type: object
+
+    SDKCreateTraceBody:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        input:
+          type: object
+        output:
+          type: object
+        metadata:
+          type: object
+        userId:
+          type: string
+        sessionId:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+
+    CreateObservationBody:
+      type: object
+      required: [trace_id]
+      properties:
+        id:
+          type: string
+        trace_id:
+          type: string
+        type:
+          type: string
+          enum: [SPAN, GENERATION, EVENT]
+        name:
+          type: string
+        input:
+          type: object
+        output:
+          type: object
+        metadata:
+          type: object
+        model:
+          type: string
+        model_parameters:
+          type: object
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+        token_usage:
+          type: object
+        cost:
+          type: number
+        status:
+          type: string
+        parent_observation_id:
+          type: string
+
+    SDKCreateObservationBody:
+      type: object
+      required: [traceId]
+      properties:
+        id:
+          type: string
+        traceId:
+          type: string
+        type:
+          type: string
+          enum: [SPAN, GENERATION, EVENT]
+        name:
+          type: string
+        input:
+          type: object
+        output:
+          type: object
+        metadata:
+          type: object
+        model:
+          type: string
+        modelParameters:
+          type: object
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+        usage:
+          type: object
+        cost:
+          type: number
+        status:
+          type: string
+        parentObservationId:
+          type: string
+
+    CreatePromptBody:
+      type: object
+      required: [name, prompt]
+      properties:
+        name:
+          type: string
+        prompt:
+          type: string
+        config:
+          type: object
+        is_active:
+          type: boolean
+
+    CreateScoreBody:
+      type: object
+      required: [trace_id, name, value]
+      properties:
+        trace_id:
+          type: string
+        name:
+          type: string
+        value:
+          type: number
+        comment:
+          type: string
+        source:
+          type: string
+          enum: [USER, EVALUATOR, SDK]
+        user_id:
+          type: string
