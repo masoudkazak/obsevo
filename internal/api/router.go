@@ -17,16 +17,18 @@ type Router struct {
 	authHandler    *AuthHandler
 	projectHandler *ProjectHandler
 	traceHandler   *TraceHandler
+	promptHandler  *PromptHandler
 }
 
 // NewRouter creates a new API router with all handlers.
-func NewRouter(queries *db.Queries, jwtService *auth.JWTService, traceHandler *TraceHandler) *Router {
+func NewRouter(queries *db.Queries, jwtService *auth.JWTService, traceHandler *TraceHandler, promptHandler *PromptHandler) *Router {
 	return &Router{
 		queries:        queries,
 		jwtService:     jwtService,
 		authHandler:    NewAuthHandler(queries, jwtService),
 		projectHandler: NewProjectHandler(queries),
 		traceHandler:   traceHandler,
+		promptHandler:  promptHandler,
 	}
 }
 
@@ -52,6 +54,9 @@ func (rt *Router) RegisterRoutes(r chi.Router) {
 
 			// Trace and observation routes
 			r.Route("/", rt.traceHandler.RegisterRoutes)
+
+			// Prompt routes
+			r.Route("/", rt.promptHandler.RegisterRoutes)
 		})
 	})
 }
