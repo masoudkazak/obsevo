@@ -1,8 +1,10 @@
 package config
 
 import (
+	"net/url"
 	"os"
 	"strconv"
+	"strings"
 )
 
 // Config holds all configuration for the application
@@ -38,7 +40,7 @@ func Load() *Config {
 		AppPort:       getEnvAsInt("APP_PORT", 3001),
 		AppSecret:     getEnv("APP_SECRET_KEY", "change-me-in-production"),
 		DatabaseURL:   getEnv("DATABASE_URL", "postgres://langfuse:langfuse@localhost:5432/langfuse_light?sslmode=disable"),
-		RedisURL:      getEnv("REDIS_URL", "redis://localhost:6379"),
+		RedisURL:      parseRedisAddr(getEnv("REDIS_URL", "redis://localhost:6379")),
 		JWTSecret:     getEnv("JWT_SECRET", "change-me-in-production"),
 		JWTExpiry:     getEnv("JWT_EXPIRY", "24h"),
 		UploadDir:     getEnv("UPLOAD_DIR", "./data/uploads"),
@@ -71,4 +73,20 @@ func getEnvAsInt64(key string, defaultValue int64) int64 {
 		}
 	}
 	return defaultValue
+}
+
+// parseRedisAddr extracts host:port from a Redis URL like redis://host:port.
+func parseRedisAddr(raw string) string {
+	if !strings.Contains(raw, "://") {
+		return raw
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return raw
+	}
+	addr := u.Host
+	if addr == "" {
+		return raw
+	}
+	return addr
 }

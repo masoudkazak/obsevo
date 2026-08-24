@@ -7,6 +7,9 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"sort"
+	"strings"
 	"syscall"
 	"time"
 
@@ -44,6 +47,15 @@ func main() {
 		log.Fatalf("Unable to ping database: %v", err)
 	}
 	log.Println("Connected to PostgreSQL")
+
+	// Run migrations
+	migrationsDir := os.Getenv("MIGRATIONS_DIR")
+	if migrationsDir == "" {
+		migrationsDir = "./migrations"
+	}
+	if err := runMigrations(ctx, pool, migrationsDir); err != nil {
+		log.Fatalf("Failed to run migrations: %v", err)
+	}
 
 	// Connect to Redis
 	rdb := redis.NewClient(&redis.Options{
@@ -130,4 +142,56 @@ func main() {
 	}
 
 	log.Println("Server stopped")
+}
+
+// runMigrations executes all .up.sql migration files in order, skipping already applied ones.
+func runMigrations(ctx context.Context, pool *pgxpool.Pool, dir string) error {
+	// Create migrations tracking table
+	_, err := pool.Exec(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (
+		filename TEXT PRIMARY KEY,
+		applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
+	)`)
+	if err != nil {
+		return fmt.Errorf("creating schema_migrations table: %w", err)
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return fmt.Errorf("reading migrations dir: %w", err)
+	}
+
+	var upFiles []string
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".up.sql") {
+			upFiles = append(upFiles, e.Name())
+		}
+	}
+	sort.Strings(upFiles)
+
+	for _, name := range upFiles {
+		// Skip already applied migrations
+		var exists bool
+		err := pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE filename = $1)`, name).Scan(&exists)
+		if err != nil {
+			return fmt.Errorf("checking migration %s: %w", name, err)
+		}
+		if exists {
+			continue
+		}
+
+		data, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			return fmt.Errorf("reading migration %s: %w", name, err)
+		}
+		if _, err := pool.Exec(ctx, string(data)); err != nil {
+			return fmt.Errorf("executing migration %s: %w", name, err)
+		}
+
+		_, err = pool.Exec(ctx, `INSERT INTO schema_migrations (filename) VALUES ($1)`, name)
+		if err != nil {
+			return fmt.Errorf("recording migration %s: %w", name, err)
+		}
+		log.Printf("Applied migration: %s", name)
+	}
+	return nil
 }

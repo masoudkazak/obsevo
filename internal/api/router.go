@@ -77,31 +77,31 @@ func (rt *Router) RegisterRoutes(r chi.Router) {
 			r.Use(auth.Middleware(rt.jwtService))
 
 			// Project and organization routes
-			r.Route("/", rt.projectHandler.RegisterRoutes)
+			rt.projectHandler.RegisterRoutes(r)
 
 			// Trace and observation routes
-			r.Route("/", rt.traceHandler.RegisterRoutes)
+			rt.traceHandler.RegisterRoutes(r)
 
 			// Prompt routes
-			r.Route("/", rt.promptHandler.RegisterRoutes)
+			rt.promptHandler.RegisterRoutes(r)
 
 			// Evaluation and analytics routes
-			r.Route("/", rt.evaluationHandler.RegisterRoutes)
+			rt.evaluationHandler.RegisterRoutes(r)
 
 			// Dataset routes
-			r.Route("/", rt.datasetHandler.RegisterRoutes)
+			rt.datasetHandler.RegisterRoutes(r)
 
 			// Evaluator routes
-			r.Route("/", rt.evaluatorHandler.RegisterRoutes)
+			rt.evaluatorHandler.RegisterRoutes(r)
 
 			// Settings and management routes
-			r.Route("/", rt.settingsHandler.RegisterRoutes)
+			rt.settingsHandler.RegisterRoutes(r)
 		})
 
 		// SDK-compatible routes (API key auth)
 		r.Route("/public", func(r chi.Router) {
 			r.Use(auth.APIKeyMiddleware(rt.queries))
-			r.Route("/", rt.sdkHandler.RegisterSDKRoutes)
+			rt.sdkHandler.RegisterSDKRoutes(r)
 		})
 	})
 }
