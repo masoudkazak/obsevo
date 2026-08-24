@@ -50,6 +50,27 @@ type DatasetRunItem struct {
 	CreatedAt     pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
+type EvaluationRun struct {
+	ID                string             `db:"id" json:"id"`
+	ProjectID         string             `db:"project_id" json:"project_id"`
+	EvaluatorConfigID string             `db:"evaluator_config_id" json:"evaluator_config_id"`
+	Name              string             `db:"name" json:"name"`
+	Status            string             `db:"status" json:"status"`
+	ResultSummary     []byte             `db:"result_summary" json:"result_summary"`
+	CreatedAt         pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
+type EvaluatorConfig struct {
+	ID          string             `db:"id" json:"id"`
+	ProjectID   string             `db:"project_id" json:"project_id"`
+	Name        string             `db:"name" json:"name"`
+	Description pgtype.Text        `db:"description" json:"description"`
+	Type        string             `db:"type" json:"type"`
+	Config      []byte             `db:"config" json:"config"`
+	IsActive    bool               `db:"is_active" json:"is_active"`
+	CreatedAt   pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
 type Member struct {
 	ID     string `db:"id" json:"id"`
 	UserID string `db:"user_id" json:"user_id"`

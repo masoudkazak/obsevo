@@ -74,6 +74,22 @@
   - Updated .env.example with detailed documentation, required var markers, production defaults
   - Performance: new migration 002_add_indexes — 7 indexes for hot query paths (prompts, scores, datasets, observations, traces)
   - All checks pass: gofmt clean, go vet clean, go build clean, go test 3/3 packages pass
+- [2026-08-24] Gap fixes: architecture completeness
+  - Created root README.md with features, architecture, quick start, API reference, project structure
+  - Created Datasets UI: list page (create, delete), detail page (items tab, runs tab, import/export)
+  - Added Datasets link to sidebar navigation
+  - Created services/projects.go — thin service layer for project/org CRUD (matches AGENTS.md layout)
+  - Added LLM-as-a-judge evaluation framework:
+    - New migration 003_evaluators — evaluator_configs and evaluation_runs tables
+    - New sqlc queries for evaluator config and run CRUD
+    - Evaluator interface with built-in code evaluators: length check, keyword check, regex check, numeric range
+    - LLM judge evaluator scaffold (API URL + prompt + model config)
+    - EvaluatorConfigService with CRUD and EvaluateTraces (creates scores from evaluator results)
+    - EvaluatorHandler API: POST/GET/DELETE evaluators, POST evaluators/{id}/run, GET evaluators/runs
+    - Wired evaluator routes into router and main.go
+  - Improved test coverage: 10 new evaluator unit tests (length, keyword, regex, numeric range, noop)
+  - Added dataset types and API methods to web/src/lib/api.ts
+  - All checks pass: gofmt clean, go vet clean, go build clean, go test pass, svelte-check 0 errors, npm build success
 
 ## Decisions made (don't re-decide these)
 - Router: Chi (chosen in Phase 1)

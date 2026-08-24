@@ -313,3 +313,39 @@ DELETE FROM members WHERE user_id = $1 AND org_id = $2;
 
 -- name: UpdateUserName :exec
 UPDATE users SET name = $2 WHERE id = $1;
+
+-- name: GetEvaluatorConfigByID :one
+SELECT * FROM evaluator_configs WHERE id = $1;
+
+-- name: GetEvaluatorConfigsByProjectID :many
+SELECT * FROM evaluator_configs WHERE project_id = $1 ORDER BY created_at DESC;
+
+-- name: CreateEvaluatorConfig :one
+INSERT INTO evaluator_configs (project_id, name, description, type, config, is_active)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING *;
+
+-- name: UpdateEvaluatorConfig :exec
+UPDATE evaluator_configs
+SET name = COALESCE($2, name),
+    description = COALESCE($3, description),
+    config = COALESCE($4, config),
+    is_active = COALESCE($5, is_active)
+WHERE id = $1;
+
+-- name: DeleteEvaluatorConfig :exec
+DELETE FROM evaluator_configs WHERE id = $1;
+
+-- name: GetEvaluationRunByID :one
+SELECT * FROM evaluation_runs WHERE id = $1;
+
+-- name: GetEvaluationRunsByProjectID :many
+SELECT * FROM evaluation_runs WHERE project_id = $1 ORDER BY created_at DESC;
+
+-- name: CreateEvaluationRun :one
+INSERT INTO evaluation_runs (project_id, evaluator_config_id, name, status, result_summary)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING *;
+
+-- name: UpdateEvaluationRunStatus :exec
+UPDATE evaluation_runs SET status = $2, result_summary = $3 WHERE id = $1;

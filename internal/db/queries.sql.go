@@ -173,6 +173,79 @@ func (q *Queries) CreateDatasetRunItem(ctx context.Context, arg CreateDatasetRun
 	return i, err
 }
 
+const createEvaluationRun = `-- name: CreateEvaluationRun :one
+INSERT INTO evaluation_runs (project_id, evaluator_config_id, name, status, result_summary)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, project_id, evaluator_config_id, name, status, result_summary, created_at
+`
+
+type CreateEvaluationRunParams struct {
+	ProjectID         string `db:"project_id" json:"project_id"`
+	EvaluatorConfigID string `db:"evaluator_config_id" json:"evaluator_config_id"`
+	Name              string `db:"name" json:"name"`
+	Status            string `db:"status" json:"status"`
+	ResultSummary     []byte `db:"result_summary" json:"result_summary"`
+}
+
+func (q *Queries) CreateEvaluationRun(ctx context.Context, arg CreateEvaluationRunParams) (EvaluationRun, error) {
+	row := q.db.QueryRow(ctx, createEvaluationRun,
+		arg.ProjectID,
+		arg.EvaluatorConfigID,
+		arg.Name,
+		arg.Status,
+		arg.ResultSummary,
+	)
+	var i EvaluationRun
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.EvaluatorConfigID,
+		&i.Name,
+		&i.Status,
+		&i.ResultSummary,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createEvaluatorConfig = `-- name: CreateEvaluatorConfig :one
+INSERT INTO evaluator_configs (project_id, name, description, type, config, is_active)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, project_id, name, description, type, config, is_active, created_at
+`
+
+type CreateEvaluatorConfigParams struct {
+	ProjectID   string      `db:"project_id" json:"project_id"`
+	Name        string      `db:"name" json:"name"`
+	Description pgtype.Text `db:"description" json:"description"`
+	Type        string      `db:"type" json:"type"`
+	Config      []byte      `db:"config" json:"config"`
+	IsActive    bool        `db:"is_active" json:"is_active"`
+}
+
+func (q *Queries) CreateEvaluatorConfig(ctx context.Context, arg CreateEvaluatorConfigParams) (EvaluatorConfig, error) {
+	row := q.db.QueryRow(ctx, createEvaluatorConfig,
+		arg.ProjectID,
+		arg.Name,
+		arg.Description,
+		arg.Type,
+		arg.Config,
+		arg.IsActive,
+	)
+	var i EvaluatorConfig
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Description,
+		&i.Type,
+		&i.Config,
+		&i.IsActive,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const createMember = `-- name: CreateMember :one
 INSERT INTO members (user_id, org_id, role)
 VALUES ($1, $2, $3)
@@ -474,6 +547,15 @@ func (q *Queries) DeleteDataset(ctx context.Context, id string) error {
 	return err
 }
 
+const deleteEvaluatorConfig = `-- name: DeleteEvaluatorConfig :exec
+DELETE FROM evaluator_configs WHERE id = $1
+`
+
+func (q *Queries) DeleteEvaluatorConfig(ctx context.Context, id string) error {
+	_, err := q.db.Exec(ctx, deleteEvaluatorConfig, id)
+	return err
+}
+
 const deleteMember = `-- name: DeleteMember :exec
 DELETE FROM members WHERE user_id = $1 AND org_id = $2
 `
@@ -740,6 +822,110 @@ func (q *Queries) GetDatasetsByProjectID(ctx context.Context, projectID string) 
 			&i.ProjectID,
 			&i.Name,
 			&i.Description,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getEvaluationRunByID = `-- name: GetEvaluationRunByID :one
+SELECT id, project_id, evaluator_config_id, name, status, result_summary, created_at FROM evaluation_runs WHERE id = $1
+`
+
+func (q *Queries) GetEvaluationRunByID(ctx context.Context, id string) (EvaluationRun, error) {
+	row := q.db.QueryRow(ctx, getEvaluationRunByID, id)
+	var i EvaluationRun
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.EvaluatorConfigID,
+		&i.Name,
+		&i.Status,
+		&i.ResultSummary,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getEvaluationRunsByProjectID = `-- name: GetEvaluationRunsByProjectID :many
+SELECT id, project_id, evaluator_config_id, name, status, result_summary, created_at FROM evaluation_runs WHERE project_id = $1 ORDER BY created_at DESC
+`
+
+func (q *Queries) GetEvaluationRunsByProjectID(ctx context.Context, projectID string) ([]EvaluationRun, error) {
+	rows, err := q.db.Query(ctx, getEvaluationRunsByProjectID, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []EvaluationRun{}
+	for rows.Next() {
+		var i EvaluationRun
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.EvaluatorConfigID,
+			&i.Name,
+			&i.Status,
+			&i.ResultSummary,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getEvaluatorConfigByID = `-- name: GetEvaluatorConfigByID :one
+SELECT id, project_id, name, description, type, config, is_active, created_at FROM evaluator_configs WHERE id = $1
+`
+
+func (q *Queries) GetEvaluatorConfigByID(ctx context.Context, id string) (EvaluatorConfig, error) {
+	row := q.db.QueryRow(ctx, getEvaluatorConfigByID, id)
+	var i EvaluatorConfig
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Description,
+		&i.Type,
+		&i.Config,
+		&i.IsActive,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getEvaluatorConfigsByProjectID = `-- name: GetEvaluatorConfigsByProjectID :many
+SELECT id, project_id, name, description, type, config, is_active, created_at FROM evaluator_configs WHERE project_id = $1 ORDER BY created_at DESC
+`
+
+func (q *Queries) GetEvaluatorConfigsByProjectID(ctx context.Context, projectID string) ([]EvaluatorConfig, error) {
+	rows, err := q.db.Query(ctx, getEvaluatorConfigsByProjectID, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []EvaluatorConfig{}
+	for rows.Next() {
+		var i EvaluatorConfig
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Name,
+			&i.Description,
+			&i.Type,
+			&i.Config,
+			&i.IsActive,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -1728,6 +1914,49 @@ func (q *Queries) GetUserByID(ctx context.Context, id string) (User, error) {
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const updateEvaluationRunStatus = `-- name: UpdateEvaluationRunStatus :exec
+UPDATE evaluation_runs SET status = $2, result_summary = $3 WHERE id = $1
+`
+
+type UpdateEvaluationRunStatusParams struct {
+	ID            string `db:"id" json:"id"`
+	Status        string `db:"status" json:"status"`
+	ResultSummary []byte `db:"result_summary" json:"result_summary"`
+}
+
+func (q *Queries) UpdateEvaluationRunStatus(ctx context.Context, arg UpdateEvaluationRunStatusParams) error {
+	_, err := q.db.Exec(ctx, updateEvaluationRunStatus, arg.ID, arg.Status, arg.ResultSummary)
+	return err
+}
+
+const updateEvaluatorConfig = `-- name: UpdateEvaluatorConfig :exec
+UPDATE evaluator_configs
+SET name = COALESCE($2, name),
+    description = COALESCE($3, description),
+    config = COALESCE($4, config),
+    is_active = COALESCE($5, is_active)
+WHERE id = $1
+`
+
+type UpdateEvaluatorConfigParams struct {
+	ID          string      `db:"id" json:"id"`
+	Name        string      `db:"name" json:"name"`
+	Description pgtype.Text `db:"description" json:"description"`
+	Config      []byte      `db:"config" json:"config"`
+	IsActive    bool        `db:"is_active" json:"is_active"`
+}
+
+func (q *Queries) UpdateEvaluatorConfig(ctx context.Context, arg UpdateEvaluatorConfigParams) error {
+	_, err := q.db.Exec(ctx, updateEvaluatorConfig,
+		arg.ID,
+		arg.Name,
+		arg.Description,
+		arg.Config,
+		arg.IsActive,
+	)
+	return err
 }
 
 const updateMemberRole = `-- name: UpdateMemberRole :exec

@@ -217,6 +217,50 @@ export interface UserProfile {
 	created_at: string;
 }
 
+export interface Dataset {
+	id: string;
+	project_id: string;
+	name: string;
+	description: string | null;
+	created_at: string;
+}
+
+export interface DatasetItem {
+	id: string;
+	dataset_id: string;
+	input: unknown;
+	expected_output: unknown;
+	metadata: unknown;
+	source_trace_id: string | null;
+	created_at: string;
+}
+
+export interface DatasetRun {
+	id: string;
+	dataset_id: string;
+	name: string;
+	created_at: string;
+}
+
+export interface DatasetRunItem {
+	id: string;
+	dataset_run_id: string;
+	dataset_item_id: string;
+	observation_id: string | null;
+	score_id: string | null;
+	created_at: string;
+}
+
+export interface RunResultExport {
+	run_item_id: string;
+	dataset_item_id: string;
+	input: unknown;
+	expected_output: unknown;
+	observation_id: string;
+	score_id: string;
+	score?: { name: string; value: number } | null;
+}
+
 export const api = {
 	auth: {
 		register: (data: { email: string; password: string; name?: string }) =>
@@ -340,6 +384,51 @@ export const api = {
 				const q = new URLSearchParams({ org_id: orgId });
 				return request<{ status: string }>(`/api/members/${userId}?${q}`, { method: 'DELETE' });
 			}
+		}
+	},
+	datasets: {
+		list: (projectId: string) => {
+			const q = new URLSearchParams({ project_id: projectId });
+			return request<Dataset[]>(`/api/datasets?${q}`);
+		},
+		create: (projectId: string, data: { name: string; description?: string }) => {
+			const q = new URLSearchParams({ project_id: projectId });
+			return request<Dataset>(`/api/datasets?${q}`, { method: 'POST', body: JSON.stringify(data) });
+		},
+		get: (id: string) => request<Dataset>(`/api/datasets/${id}`),
+		delete: (id: string) => request<{ status: string }>(`/api/datasets/${id}`, { method: 'DELETE' }),
+		items: {
+			list: (datasetId: string) => request<DatasetItem[]>(`/api/datasets/${datasetId}/items`),
+			create: (datasetId: string, data: { input: unknown; expected_output?: unknown; metadata?: unknown; source_trace_id?: string }) =>
+				request<DatasetItem>(`/api/datasets/${datasetId}/items`, { method: 'POST', body: JSON.stringify(data) })
+		},
+		importItems: (datasetId: string, data: unknown[] | string, type: 'json' | 'csv' = 'json') => {
+			const headers: Record<string, string> = {};
+			if (type === 'csv') {
+				headers['Content-Type'] = 'text/csv';
+			}
+			return request<{ imported: number; items: DatasetItem[] }>(`/api/datasets/${datasetId}/import`, {
+				method: 'POST',
+				headers,
+				body: type === 'csv' ? data as string : JSON.stringify(data)
+			});
+		},
+		exportItems: (datasetId: string, format: 'json' | 'csv' = 'json') =>
+			request<DatasetItem[]>(`/api/datasets/${datasetId}/export?format=${format}`),
+		runs: {
+			list: (datasetId: string) => request<DatasetRun[]>(`/api/datasets/${datasetId}/runs`),
+			create: (datasetId: string, data: { name: string }) =>
+				request<DatasetRun>(`/api/datasets/${datasetId}/runs`, { method: 'POST', body: JSON.stringify(data) }),
+			get: (datasetId: string, runId: string) =>
+				request<DatasetRun>(`/api/datasets/${datasetId}/runs/${runId}`),
+			items: {
+				list: (datasetId: string, runId: string) =>
+					request<DatasetRunItem[]>(`/api/datasets/${datasetId}/runs/${runId}/items`),
+				create: (datasetId: string, runId: string, data: { dataset_item_id: string; observation_id?: string; score_id?: string }) =>
+					request<DatasetRunItem>(`/api/datasets/${datasetId}/runs/${runId}/items`, { method: 'POST', body: JSON.stringify(data) })
+			},
+			export: (datasetId: string, runId: string, format: 'json' | 'csv' = 'json') =>
+				request<RunResultExport[]>(`/api/datasets/${datasetId}/runs/${runId}/export?format=${format}`)
 		}
 	}
 };

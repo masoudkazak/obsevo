@@ -23,12 +23,13 @@ type Router struct {
 	promptHandler     *PromptHandler
 	evaluationHandler *EvaluationHandler
 	datasetHandler    *DatasetHandler
+	evaluatorHandler  *EvaluatorHandler
 	settingsHandler   *SettingsHandler
 	sdkHandler        *SDKHandler
 }
 
 // NewRouter creates a new API router with all handlers.
-func NewRouter(queries *db.Queries, dbPool *pgxpool.Pool, jwtService *auth.JWTService, traceHandler *TraceHandler, promptHandler *PromptHandler, evaluationHandler *EvaluationHandler, datasetHandler *DatasetHandler) *Router {
+func NewRouter(queries *db.Queries, dbPool *pgxpool.Pool, jwtService *auth.JWTService, traceHandler *TraceHandler, promptHandler *PromptHandler, evaluationHandler *EvaluationHandler, datasetHandler *DatasetHandler, evaluatorHandler *EvaluatorHandler) *Router {
 	return &Router{
 		queries:           queries,
 		dbPool:            dbPool,
@@ -39,6 +40,7 @@ func NewRouter(queries *db.Queries, dbPool *pgxpool.Pool, jwtService *auth.JWTSe
 		promptHandler:     promptHandler,
 		evaluationHandler: evaluationHandler,
 		datasetHandler:    datasetHandler,
+		evaluatorHandler:  evaluatorHandler,
 		settingsHandler:   NewSettingsHandler(queries),
 		sdkHandler:        NewSDKHandler(traceHandler.traceService),
 	}
@@ -88,6 +90,9 @@ func (rt *Router) RegisterRoutes(r chi.Router) {
 
 			// Dataset routes
 			r.Route("/", rt.datasetHandler.RegisterRoutes)
+
+			// Evaluator routes
+			r.Route("/", rt.evaluatorHandler.RegisterRoutes)
 
 			// Settings and management routes
 			r.Route("/", rt.settingsHandler.RegisterRoutes)
