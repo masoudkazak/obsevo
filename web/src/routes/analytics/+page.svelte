@@ -185,6 +185,8 @@
 	$effect(() => {
 		if ($currentProject) {
 			loadData();
+		} else {
+			loading = false;
 		}
 	});
 
@@ -219,6 +221,11 @@
 
 	{#if loading}
 		<div class="text-center py-12 text-gray-500">Loading analytics...</div>
+	{:else if !$currentProject}
+		<div class="text-center py-12 bg-white rounded-lg border border-gray-200">
+			<h3 class="text-sm font-medium text-gray-900">No project selected</h3>
+			<p class="mt-1 text-sm text-gray-500">Create a project from Settings to get started.</p>
+		</div>
 	{:else}
 		<!-- Summary Cards -->
 		<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">

@@ -56,6 +56,8 @@
 	$effect(() => {
 		if ($currentProject) {
 			loadKeys();
+		} else {
+			loading = false;
 		}
 	});
 </script>
@@ -99,6 +101,8 @@
 
 	{#if loading}
 		<div class="text-center py-8 text-gray-500">Loading API keys...</div>
+	{:else if !$currentProject}
+		<div class="text-center py-8 text-gray-500">No project selected.</div>
 	{:else if keys.length === 0}
 		<div class="text-center py-8 text-gray-500">No API keys yet. Create one above.</div>
 	{:else}

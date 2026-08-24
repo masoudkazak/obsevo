@@ -90,6 +90,21 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Auto-create default organization, member, and project
+	ctx := context.Background()
+	org, err := h.queries.CreateOrganization(ctx, "My Organization")
+	if err == nil {
+		h.queries.CreateMember(ctx, db.CreateMemberParams{
+			UserID: user.ID,
+			OrgID:  org.ID,
+			Role:   "ADMIN",
+		})
+		projects, _ := h.queries.GetProjectsByOrgID(ctx, org.ID)
+		if len(projects) == 0 {
+		h.queries.CreateProject(ctx, db.CreateProjectParams{Name: "My Project", OrgID: org.ID})
+		}
+	}
+
 	// Generate JWT token
 	token, err := h.jwtService.GenerateToken(user.ID, user.Email)
 	if err != nil {

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import '../app.css';
-	import { auth, isAuthenticated, projects, currentProject, notifications } from '$lib/stores';
+	import { auth, isAuthenticated, projects, currentProject, notifications, organizations } from '$lib/stores';
 	import { api } from '$lib/api';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
@@ -23,6 +23,9 @@
 				if (p.length > 0 && !$currentProject) {
 					currentProject.set(p[0]);
 				}
+			}).catch(() => {});
+			api.organizations.list().then((o) => {
+				organizations.set(o);
 			}).catch(() => {});
 		}
 	});

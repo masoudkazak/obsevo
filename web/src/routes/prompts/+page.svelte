@@ -27,6 +27,8 @@
 	$effect(() => {
 		if ($currentProject) {
 			loadPrompts();
+		} else {
+			loading = false;
 		}
 	});
 
@@ -97,6 +99,11 @@
 
 	{#if loading}
 		<div class="text-center py-12 text-gray-500">Loading prompts...</div>
+	{:else if !$currentProject}
+		<div class="text-center py-12 bg-white rounded-lg border border-gray-200">
+			<h3 class="text-sm font-medium text-gray-900">No project selected</h3>
+			<p class="mt-1 text-sm text-gray-500">Create a project from Settings to get started.</p>
+		</div>
 	{:else if grouped.size === 0}
 		<div class="text-center py-12 bg-white rounded-lg border border-gray-200">
 			<svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
