@@ -9,9 +9,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/langfuse-light/langfuse-light/internal/auth"
-	"github.com/langfuse-light/langfuse-light/internal/queue"
-	"github.com/langfuse-light/langfuse-light/internal/services"
+	"github.com/obsevo/obsevo/internal/auth"
+	"github.com/obsevo/obsevo/internal/queue"
+	"github.com/obsevo/obsevo/internal/services"
 )
 
 // maxBatchItems bounds a single ingestion batch. The Langfuse SDKs flush in
@@ -773,7 +773,7 @@ func (h *SDKHandler) GetSession(w http.ResponseWriter, r *http.Request) {
 func (h *SDKHandler) Health(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{
 		"status":  "OK",
-		"version": "langfuse-light",
+		"version": "obsevo",
 	})
 }
 

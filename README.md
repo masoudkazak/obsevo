@@ -1,6 +1,6 @@
-# Langfuse Light
+# Obsevo
 
-A lightweight, self-hosted, MIT-licensed open-source alternative to [Langfuse](https://langfuse.com) for LLM observability.
+A lightweight, self-hosted, MIT-licensed LLM observability platform.
 
 Built with **Go** (backend) + **SvelteKit** (frontend) + **PostgreSQL** + **Redis**.
 
@@ -11,7 +11,7 @@ Built with **Go** (backend) + **SvelteKit** (frontend) + **PostgreSQL** + **Redi
 - **Evaluation & Scoring** — Score CRUD, LLM-as-a-judge evaluators, aggregation, analytics
 - **Datasets** — Test sets, batch evaluation runs, CSV/JSON import/export
 - **Analytics Dashboard** — Cost, latency, token usage, error rate over time with charts
-- **SDK Compatibility** — Python/JS Langfuse SDK compatible API endpoints (`/api/public/`)
+- **SDK Compatibility** — Python/JS SDK compatible API endpoints (`/api/public/`)
 - **Auth** — JWT-based authentication, organization/project management, role-based access (viewer/editor/admin)
 - **API Keys** — Project-level API keys for SDK ingestion
 
@@ -19,7 +19,7 @@ Built with **Go** (backend) + **SvelteKit** (frontend) + **PostgreSQL** + **Redi
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│              Langfuse Light                          │
+│                   Obsevo                             │
 ├─────────────────────────────────────────────────────┤
 │  Frontend:  SvelteKit (Tailwind CSS v4, Chart.js)   │
 │  Backend:   Go (Chi router + sqlc)                  │
@@ -31,7 +31,7 @@ Built with **Go** (backend) + **SvelteKit** (frontend) + **PostgreSQL** + **Redi
 └─────────────────────────────────────────────────────┘
 ```
 
-**3-4 containers** vs 6 in original Langfuse. ~200-400MB RAM vs 8GB+.
+**3-4 containers**. ~200-400MB RAM. Self-hosted.
 
 ## Quick Start
 
@@ -43,8 +43,8 @@ Built with **Go** (backend) + **SvelteKit** (frontend) + **PostgreSQL** + **Redi
 ### 1. Clone and configure
 
 ```bash
-git clone <repo-url> langfuse-light
-cd langfuse-light
+git clone <repo-url> obsevo
+cd obsevo
 cp .env.example .env
 ```
 
@@ -154,7 +154,7 @@ cd web && npm run dev
 ## Project Structure
 
 ```
-langfuse-light/
+obsevo/
 ├── cmd/server/main.go           # Entry point
 ├── internal/
 │   ├── config/config.go         # Env-based config

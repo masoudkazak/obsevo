@@ -6,7 +6,7 @@ import (
 	"math"
 	"sort"
 
-	"github.com/langfuse-light/langfuse-light/internal/db"
+	"github.com/obsevo/obsevo/internal/db"
 )
 
 // regressionThreshold is the relative change below which a metric is treated as

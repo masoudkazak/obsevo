@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/langfuse-light/langfuse-light/internal/db"
-	"github.com/langfuse-light/langfuse-light/internal/services"
+	"github.com/obsevo/obsevo/internal/db"
+	"github.com/obsevo/obsevo/internal/services"
 )
 
 // Every Langfuse SDK stamps events with RFC 3339. A regression here silently
@@ -127,7 +127,7 @@ func TestNormalizeUsageIgnoresUnusableInput(t *testing.T) {
 
 func TestBuildTargetDecodesTraceContent(t *testing.T) {
 	trace := db.Trace{
-		Input:      json.RawMessage(`"what is langfuse?"`),
+		Input:      json.RawMessage(`"what is obsevo?"`),
 		Output:     json.RawMessage(`"an observability platform"`),
 		Metadata:   json.RawMessage(`{"tenant":"acme","retries":2}`),
 		TokenUsage: json.RawMessage(`{"input_tokens":100,"output_tokens":50,"total_tokens":150}`),
@@ -145,7 +145,7 @@ func TestBuildTargetDecodesTraceContent(t *testing.T) {
 	target := services.BuildTarget(trace, observations, "expected answer")
 
 	// A JSON string is unwrapped so evaluators see the text, not its quoted form.
-	if target.Input != "what is langfuse?" {
+	if target.Input != "what is obsevo?" {
 		t.Errorf("expected the decoded input, got %q", target.Input)
 	}
 	if target.Output != "an observability platform" {

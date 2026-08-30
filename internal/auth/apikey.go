@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/langfuse-light/langfuse-light/internal/db"
+	"github.com/obsevo/obsevo/internal/db"
 )
 
 // Key prefixes match Langfuse, so a key is recognisable at a glance and the
@@ -140,7 +140,7 @@ func APIKeyMiddleware(queries *db.Queries) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			projectID, keyID, err := authenticateAPIKey(r, queries, cache)
 			if err != nil {
-				w.Header().Set("WWW-Authenticate", `Basic realm="langfuse-light"`)
+				w.Header().Set("WWW-Authenticate", `Basic realm="obsevo"`)
 				http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusUnauthorized)
 				return
 			}

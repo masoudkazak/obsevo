@@ -10,8 +10,8 @@
 ### 1. Clone and configure
 
 ```bash
-git clone <repo-url> langfuse-light
-cd langfuse-light
+git clone <repo-url> obsevo
+cd obsevo
 cp .env.example .env
 ```
 
@@ -42,15 +42,15 @@ Services will start in order: postgres → redis → api.
 
 ```bash
 curl http://localhost:3001/health
-# {"status":"ok","service":"langfuse-light"}
+# {"status":"ok","service":"obsevo"}
 ```
 
 ### 5. Apply database migrations
 
 ```bash
-docker compose exec api ./langfuse-light migrate up
+docker compose exec api ./obsevo migrate up
 # Or use the migrate tool directly:
-migrate -path migrations -database "postgres://langfuse:<password>@localhost:5432/langfuse_light?sslmode=disable" up
+migrate -path migrations -database "postgres://obsevo:<password>@localhost:5432/obsevo?sslmode=disable" up
 ```
 
 ---
@@ -62,10 +62,10 @@ migrate -path migrations -database "postgres://langfuse:<password>@localhost:543
 | `APP_ENV` | No | `production` | Environment: `development`, `staging`, `production` |
 | `APP_PORT` | No | `3001` | API server port |
 | `APP_SECRET_KEY` | **Yes** | — | Application secret key (min 32 chars) |
-| `DATABASE_URL` | No | `postgres://langfuse:langfuse@localhost:5432/langfuse_light?sslmode=disable` | PostgreSQL connection string |
-| `POSTGRES_USER` | No | `langfuse` | PostgreSQL username |
-| `POSTGRES_PASSWORD` | No | `langfuse` | PostgreSQL password |
-| `POSTGRES_DB` | No | `langfuse_light` | PostgreSQL database name |
+| `DATABASE_URL` | No | `postgres://obsevo:obsevo@localhost:5432/obsevo?sslmode=disable` | PostgreSQL connection string |
+| `POSTGRES_USER` | No | `obsevo` | PostgreSQL username |
+| `POSTGRES_PASSWORD` | No | `obsevo` | PostgreSQL password |
+| `POSTGRES_DB` | No | `obsevo` | PostgreSQL database name |
 | `POSTGRES_PORT` | No | `5432` | PostgreSQL exposed port |
 | `REDIS_URL` | No | `redis://localhost:6379` | Redis connection string |
 | `REDIS_PORT` | No | `6379` | Redis exposed port |

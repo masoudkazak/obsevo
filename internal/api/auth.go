@@ -8,8 +8,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/langfuse-light/langfuse-light/internal/auth"
-	"github.com/langfuse-light/langfuse-light/internal/db"
+	"github.com/obsevo/obsevo/internal/auth"
+	"github.com/obsevo/obsevo/internal/db"
 )
 
 // AuthHandler handles authentication requests

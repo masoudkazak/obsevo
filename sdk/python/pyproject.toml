@@ -3,9 +3,9 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "langfuse-light"
+name = "obsevo"
 version = "0.1.0"
-description = "Lightweight Python client for Langfuse Light — LLM tracing, prompts and scores"
+description = "Lightweight Python client for Obsevo — LLM tracing, prompts and scores"
 readme = "README.md"
 requires-python = ">=3.8"
 license = { text = "MIT" }
@@ -14,7 +14,7 @@ license = { text = "MIT" }
 dependencies = []
 
 [project.urls]
-Homepage = "https://github.com/langfuse-light/langfuse-light"
+Homepage = "https://github.com/obsevo/obsevo"
 
 [tool.setuptools.packages.find]
 include = ["langfuse_light*"]

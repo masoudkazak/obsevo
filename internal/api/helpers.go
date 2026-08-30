@@ -8,8 +8,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/langfuse-light/langfuse-light/internal/auth"
-	"github.com/langfuse-light/langfuse-light/internal/services"
+	"github.com/obsevo/obsevo/internal/auth"
+	"github.com/obsevo/obsevo/internal/services"
 )
 
 // requireProject returns the authorized project for the request. The project was

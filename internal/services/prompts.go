@@ -10,7 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/langfuse-light/langfuse-light/internal/db"
+	"github.com/obsevo/obsevo/internal/db"
 )
 
 // Prompt types, matching Langfuse.

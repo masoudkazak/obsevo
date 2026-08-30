@@ -10,8 +10,8 @@ import (
 )
 
 const (
-	ingestionQueueKey = "langfuse:ingestion:queue"
-	deadLetterKey     = "langfuse:ingestion:dead"
+	ingestionQueueKey = "obsevo:ingestion:queue"
+	deadLetterKey     = "obsevo:ingestion:dead"
 
 	// maxAttempts caps redelivery so a permanently malformed item cannot spin
 	// in the queue forever.

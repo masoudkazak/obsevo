@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/langfuse-light/langfuse-light/internal/services/evaluator"
+	"github.com/obsevo/obsevo/internal/services/evaluator"
 )
 
 // build constructs an evaluator or fails the test.

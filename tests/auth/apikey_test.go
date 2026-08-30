@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/langfuse-light/langfuse-light/internal/auth"
+	"github.com/obsevo/obsevo/internal/auth"
 )
 
 func TestGenerateKeyPairShape(t *testing.T) {

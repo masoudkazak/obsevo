@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/langfuse-light/langfuse-light/internal/auth"
+	"github.com/obsevo/obsevo/internal/auth"
 )
 
 func TestJWTService_GenerateAndValidate(t *testing.T) {

@@ -7,8 +7,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/langfuse-light/langfuse-light/internal/auth"
-	"github.com/langfuse-light/langfuse-light/internal/services"
+	"github.com/obsevo/obsevo/internal/auth"
+	"github.com/obsevo/obsevo/internal/services"
 )
 
 // PromptHandler handles prompt HTTP requests.

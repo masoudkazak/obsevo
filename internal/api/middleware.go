@@ -11,8 +11,8 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"github.com/langfuse-light/langfuse-light/internal/auth"
-	"github.com/langfuse-light/langfuse-light/internal/db"
+	"github.com/obsevo/obsevo/internal/auth"
+	"github.com/obsevo/obsevo/internal/db"
 )
 
 // CORS returns a middleware that answers preflight requests and sets the
@@ -114,7 +114,7 @@ func (rl *RateLimiter) Limit(scope string, scopeLimit int) func(http.Handler) ht
 		}
 
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			key := fmt.Sprintf("langfuse:ratelimit:%s:%s:%d",
+			key := fmt.Sprintf("obsevo:ratelimit:%s:%s:%d",
 				scope, rateLimitSubject(r), time.Now().Unix()/60)
 
 			count, err := rl.client.Incr(r.Context(), key).Result()

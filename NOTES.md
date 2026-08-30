@@ -1,4 +1,4 @@
-# NOTES.md — Langfuse Light
+# NOTES.md — Obsevo
 
 ## Session log
 - [2026-08-24] Phase 1: Foundation setup complete - Go module, SvelteKit, Docker, migrations, sqlc
@@ -162,6 +162,13 @@
 - .env.example — updated with documentation and production defaults
 - migrations/002_add_indexes.up.sql — new file, 7 performance indexes
 - migrations/002_add_indexes.down.sql — new file, rollback indexes
+
+## test-project (gitignored)
+- FastAPI test client at `test-project/` for exercising all Langfuse Light features
+- AI integration via OpenRouter free tier (`meta-llama/llama-3.1-8b-instruct:free`)
+- Covers: auth, traces, observations, prompts, scores, datasets, analytics, batch ingestion
+- Run: `cd test-project && pip install -r requirements.txt && uvicorn app:app --port 3000`
+- Works without API key (mock responses) for tracing-only testing
 
 ## Known limitations (intentional, per AGENTS.md)
 - no ClickHouse, no S3, single worker, etc.

@@ -6,8 +6,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/langfuse-light/langfuse-light/internal/db"
-	"github.com/langfuse-light/langfuse-light/internal/services"
+	"github.com/obsevo/obsevo/internal/db"
+	"github.com/obsevo/obsevo/internal/services"
 )
 
 // The dashboard API returns stored rows as-is, in snake_case — that is its

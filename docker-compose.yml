@@ -4,18 +4,18 @@ services:
   # PostgreSQL Database
   postgres:
     image: postgres:16-alpine
-    container_name: langfuse-postgres
+    container_name: obsevo-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-langfuse}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-langfuse}
-      POSTGRES_DB: ${POSTGRES_DB:-langfuse_light}
+      POSTGRES_USER: ${POSTGRES_USER:-obsevo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-obsevo}
+      POSTGRES_DB: ${POSTGRES_DB:-obsevo}
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-langfuse} -d ${POSTGRES_DB:-langfuse_light}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-obsevo} -d ${POSTGRES_DB:-obsevo}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -27,7 +27,7 @@ services:
   # Redis
   redis:
     image: redis:7-alpine
-    container_name: langfuse-redis
+    container_name: obsevo-redis
     restart: unless-stopped
     ports:
       - "${REDIS_PORT:-6379}:6379"
@@ -48,14 +48,14 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: langfuse-api
+    container_name: obsevo-api
     restart: unless-stopped
     ports:
       - "${APP_PORT:-3001}:3001"
     environment:
       APP_ENV: ${APP_ENV:-production}
       APP_PORT: 3001
-      DATABASE_URL: postgres://${POSTGRES_USER:-langfuse}:${POSTGRES_PASSWORD:-langfuse}@postgres:5432/${POSTGRES_DB:-langfuse_light}?sslmode=disable
+      DATABASE_URL: postgres://${POSTGRES_USER:-obsevo}:${POSTGRES_PASSWORD:-obsevo}@postgres:5432/${POSTGRES_DB:-obsevo}?sslmode=disable
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
       APP_SECRET_KEY: ${APP_SECRET_KEY:?Set APP_SECRET_KEY in .env}

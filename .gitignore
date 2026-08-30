@@ -1,7 +1,7 @@
 # --- Go ---
-# Compiled binaries. /server and /langfuse-light are what `make build` produces.
+# Compiled binaries. /server and /obsevo are what `make build` produces.
 /server
-/langfuse-light
+/obsevo
 /bin/
 *.exe
 *.exe~

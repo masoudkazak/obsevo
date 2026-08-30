@@ -79,4 +79,4 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build Docker image
-        run: docker build -t langfuse-light:test .
+        run: docker build -t obsevo:test .

@@ -1,7 +1,7 @@
-# AGENTS.md — Langfuse Light
+# AGENTS.md — Obsevo
 
-You are an autonomous coding agent working on **Langfuse Light**, a lightweight
-open-source clone of Langfuse (LLM observability platform). This file is the
+You are an autonomous coding agent working on **Obsevo**, a lightweight
+open-source LLM observability platform. This file is the
 single source of truth for how you must work in this repo. Read it fully
 before touching any file. If something here conflicts with what you "know"
 from training, THIS FILE WINS.
@@ -44,14 +44,9 @@ from training, THIS FILE WINS.
 
 ## 1. What this project is
 
-A self-hosted, MIT-licensed, lightweight alternative to Langfuse with:
+A self-hosted, MIT-licensed, lightweight LLM observability platform with:
 LLM trace/observation logging, prompt versioning, evaluation/scoring,
 datasets + batch evaluation runs, and a small analytics dashboard.
-
-It is **not** a copy of Langfuse's code — only behavior/API shape is similar.
-Complex multi-tenancy, ClickHouse, S3, Kubernetes, and BullMQ are
-intentionally **removed**. Do not re-add them. See "Explicitly out of scope"
-below.
 
 ### Explicitly out of scope — never implement these unless asked
 - ClickHouse, or any second database engine
@@ -87,7 +82,7 @@ service/container, stop and ask.
 ## 3. Directory structure (create/use exactly this layout)
 
 ```
-langfuse-light/
+obsevo/
 ├── docker-compose.yml
 ├── Dockerfile
 ├── .env.example

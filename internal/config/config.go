@@ -51,7 +51,7 @@ func Load() *Config {
 		AppEnv:        getEnv("APP_ENV", "development"),
 		AppPort:       getEnvAsInt("APP_PORT", 3001),
 		AppSecret:     getEnv("APP_SECRET_KEY", "change-me-in-production"),
-		DatabaseURL:   getEnv("DATABASE_URL", "postgres://langfuse:langfuse@localhost:5432/langfuse_light?sslmode=disable"),
+		DatabaseURL:   getEnv("DATABASE_URL", "postgres://obsevo:obsevo@localhost:5432/obsevo?sslmode=disable"),
 		RedisURL:      parseRedisAddr(getEnv("REDIS_URL", "redis://localhost:6379")),
 		JWTSecret:     getEnv("JWT_SECRET", "change-me-in-production"),
 		JWTExpiry:     getEnv("JWT_EXPIRY", "24h"),

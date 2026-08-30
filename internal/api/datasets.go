@@ -9,7 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/langfuse-light/langfuse-light/internal/services"
+	"github.com/obsevo/obsevo/internal/services"
 )
 
 // DatasetHandler handles dataset, dataset run and experiment HTTP requests.

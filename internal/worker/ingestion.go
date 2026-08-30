@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/langfuse-light/langfuse-light/internal/queue"
-	"github.com/langfuse-light/langfuse-light/internal/services"
+	"github.com/obsevo/obsevo/internal/queue"
+	"github.com/obsevo/obsevo/internal/services"
 )
 
 const (

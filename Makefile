@@ -1,7 +1,7 @@
 .PHONY: all build run test lint fmt clean docker-up docker-down db-migrate db-rollback sqlc-generate benchmark
 
 # Variables
-APP_NAME := langfuse-light
+APP_NAME := obsevo
 BUILD_DIR := ./bin
 GO := go
 GOFLAGS := -v

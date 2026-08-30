@@ -415,7 +415,7 @@ type sampler struct {
 	container string
 }
 
-const ingestionQueueKey = "langfuse:ingestion:queue"
+const ingestionQueueKey = "obsevo:ingestion:queue"
 
 func newSampler(ctx context.Context, databaseURL, redisURL, container string) (*sampler, error) {
 	s := &sampler{container: container}

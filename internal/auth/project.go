@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/langfuse-light/langfuse-light/internal/db"
+	"github.com/obsevo/obsevo/internal/db"
 )
 
 // RoleKey holds the caller's role in the organization owning the current project.

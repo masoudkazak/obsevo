@@ -1,5 +1,5 @@
 /**
- * Langfuse Light — lightweight TypeScript/JavaScript client.
+ * Obsevo — lightweight TypeScript/JavaScript client.
  *
  * Dependency-free: it uses the global `fetch`, available in Node 18+, Deno,
  * Bun and browsers. Events are buffered and flushed in the background, so
@@ -117,11 +117,11 @@ export class Langfuse {
     this.flushInterval = options.flushInterval ?? 2000;
     this.timeout = options.timeout ?? 10000;
     this.maxRetries = options.maxRetries ?? 3;
-    this.onError = options.onError ?? ((error) => console.warn("[langfuse-light]", error));
+    this.onError = options.onError ?? ((error) => console.warn("[obsevo]", error));
 
     this.enabled = (options.enabled ?? true) && Boolean(this.publicKey && this.secretKey);
     if ((options.enabled ?? true) && !this.enabled) {
-      console.warn("[langfuse-light] disabled: set LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY");
+      console.warn("[obsevo] disabled: set LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY");
     }
 
     if (this.enabled && this.flushInterval > 0) {
@@ -228,7 +228,7 @@ export class Langfuse {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Basic ${base64(`${this.publicKey}:${this.secretKey}`)}`,
-          "User-Agent": "langfuse-light-typescript",
+          "User-Agent": "obsevo-typescript",
         },
         body: body === undefined ? undefined : JSON.stringify(body),
         signal: controller.signal,

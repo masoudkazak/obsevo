@@ -3,7 +3,7 @@ package auth_test
 import (
 	"testing"
 
-	"github.com/langfuse-light/langfuse-light/internal/auth"
+	"github.com/obsevo/obsevo/internal/auth"
 )
 
 func TestHashPassword(t *testing.T) {

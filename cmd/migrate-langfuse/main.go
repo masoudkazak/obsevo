@@ -1,5 +1,5 @@
 // Command migrate-langfuse copies a project from a Langfuse instance into
-// Langfuse Light.
+// Obsevo.
 //
 // It reads through Langfuse's own public API and writes through this project's
 // Langfuse-compatible API, so the transform is mostly an identity mapping — that
@@ -44,7 +44,7 @@ func main() {
 		sourcePublicKey = flag.String("source-public-key", os.Getenv("LANGFUSE_SOURCE_PUBLIC_KEY"), "source public key")
 		sourceSecretKey = flag.String("source-secret-key", os.Getenv("LANGFUSE_SOURCE_SECRET_KEY"), "source secret key")
 
-		targetHost      = flag.String("target-host", "http://localhost:3001", "Langfuse Light instance to write to")
+		targetHost      = flag.String("target-host", "http://localhost:3001", "Obsevo instance to write to")
 		targetPublicKey = flag.String("target-public-key", os.Getenv("LANGFUSE_PUBLIC_KEY"), "target public key")
 		targetSecretKey = flag.String("target-secret-key", os.Getenv("LANGFUSE_SECRET_KEY"), "target secret key")
 

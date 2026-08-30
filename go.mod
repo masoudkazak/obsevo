@@ -1,4 +1,4 @@
-module github.com/langfuse-light/langfuse-light
+module github.com/obsevo/obsevo
 
 go 1.22.5
 

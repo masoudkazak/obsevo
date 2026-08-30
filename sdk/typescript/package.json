@@ -1,7 +1,7 @@
 {
-  "name": "langfuse-light",
+  "name": "obsevo",
   "version": "0.1.0",
-  "description": "Lightweight TypeScript client for Langfuse Light — LLM tracing, prompts and scores",
+  "description": "Lightweight TypeScript client for Obsevo — LLM tracing, prompts and scores",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",

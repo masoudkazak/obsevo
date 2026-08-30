@@ -10,11 +10,11 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"github.com/langfuse-light/langfuse-light/internal/auth"
-	"github.com/langfuse-light/langfuse-light/internal/config"
-	"github.com/langfuse-light/langfuse-light/internal/db"
-	"github.com/langfuse-light/langfuse-light/internal/queue"
-	"github.com/langfuse-light/langfuse-light/internal/services"
+	"github.com/obsevo/obsevo/internal/auth"
+	"github.com/obsevo/obsevo/internal/config"
+	"github.com/obsevo/obsevo/internal/db"
+	"github.com/obsevo/obsevo/internal/queue"
+	"github.com/obsevo/obsevo/internal/services"
 )
 
 // Router holds all handlers and configures the API routes.
@@ -113,7 +113,7 @@ func (rt *Router) RegisterRoutes(r chi.Router) {
 		w.WriteHeader(code)
 		json.NewEncoder(w).Encode(map[string]string{
 			"status":  status,
-			"service": "langfuse-light",
+			"service": "obsevo",
 		})
 	})
 

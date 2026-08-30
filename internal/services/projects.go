@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/langfuse-light/langfuse-light/internal/db"
+	"github.com/obsevo/obsevo/internal/db"
 )
 
 // ProjectService handles project and organization business logic.

@@ -18,13 +18,13 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
-	"github.com/langfuse-light/langfuse-light/internal/api"
-	"github.com/langfuse-light/langfuse-light/internal/auth"
-	"github.com/langfuse-light/langfuse-light/internal/config"
-	"github.com/langfuse-light/langfuse-light/internal/db"
-	"github.com/langfuse-light/langfuse-light/internal/queue"
-	"github.com/langfuse-light/langfuse-light/internal/services"
-	"github.com/langfuse-light/langfuse-light/internal/worker"
+	"github.com/obsevo/obsevo/internal/api"
+	"github.com/obsevo/obsevo/internal/auth"
+	"github.com/obsevo/obsevo/internal/config"
+	"github.com/obsevo/obsevo/internal/db"
+	"github.com/obsevo/obsevo/internal/queue"
+	"github.com/obsevo/obsevo/internal/services"
+	"github.com/obsevo/obsevo/internal/worker"
 )
 
 func main() {

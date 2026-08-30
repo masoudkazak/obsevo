@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/langfuse-light/langfuse-light/internal/db"
-	"github.com/langfuse-light/langfuse-light/internal/services"
+	"github.com/obsevo/obsevo/internal/db"
+	"github.com/obsevo/obsevo/internal/services"
 )
 
 func TestCompileTemplate_NoVariables(t *testing.T) {

@@ -3,7 +3,7 @@ package services_test
 import (
 	"testing"
 
-	"github.com/langfuse-light/langfuse-light/internal/services"
+	"github.com/obsevo/obsevo/internal/services"
 )
 
 // findDelta locates a metric in a comparison group.

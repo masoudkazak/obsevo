@@ -1,4 +1,4 @@
-"""Client and tracing primitives for Langfuse Light.
+"""Client and tracing primitives for Obsevo.
 
 The SDK is deliberately dependency-free: it uses only the standard library, so
 installing it cannot drag a transitive dependency tree into an application that
@@ -22,7 +22,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterator, List, Optional, Sequence
 
-logger = logging.getLogger("langfuse_light")
+logger = logging.getLogger("obsevo")
 
 __all__ = [
     "Langfuse",
@@ -87,7 +87,7 @@ class Langfuse:
         self.enabled = enabled and bool(self.public_key and self.secret_key)
         if enabled and not self.enabled:
             logger.warning(
-                "Langfuse Light disabled: set LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY"
+                "Obsevo disabled: set LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY"
             )
 
         self._queue: List[Dict[str, Any]] = []
@@ -98,7 +98,7 @@ class Langfuse:
 
         if self.enabled:
             self._worker = threading.Thread(
-                target=self._run, name="langfuse-light-flush", daemon=True
+                target=self._run, name="obsevo-flush", daemon=True
             )
             self._worker.start()
             atexit.register(self.shutdown)
@@ -282,7 +282,7 @@ class Langfuse:
             headers={
                 "Content-Type": "application/json",
                 "Authorization": f"Basic {credentials}",
-                "User-Agent": "langfuse-light-python",
+                "User-Agent": "obsevo-python",
             },
         )
 
