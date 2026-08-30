@@ -1,6 +1,16 @@
 # NOTES.md — Obsevo
 
 ## Session log
+- [2026-08-30] Production hardening: fixed evaluator panic, added body size limits, Redis auth, security headers, env validation, structured logging, tests
+  - evaluator/evaluator.go: panic() replaced with log+skip for Register/RegisterAlias
+  - api/middleware.go: added LimitBody, RequestLogger, enhanced SecurityHeaders (CSP, HSTS, XSS)
+  - config/config.go: added RedisPassword, MaxBodyBytes, WarnDefaults()
+  - cmd/server/main.go: Redis password support, WarnDefaults call, RequestLogger middleware
+  - internal/log/log.go: new structured logger with request ID correlation
+  - New test files: tests/config/config_test.go, tests/log/log_test.go
+  - Added tests to tests/api/handlers_test.go (security headers, body limit, request logger)
+  - Added evaluator registration tests to tests/services/evaluator_test.go
+  - All checks pass: gofmt, go vet, go build, go test, svelte-check
 - [2026-08-24] Phase 1: Foundation setup complete - Go module, SvelteKit, Docker, migrations, sqlc
 - [2026-08-24] Phase 1: sqlc code generated, Chi router selected
 - [2026-08-24] Phase 2: Auth system implemented - password hashing, JWT, register/login endpoints

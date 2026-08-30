@@ -1,6 +1,7 @@
 package config
 
 import (
+	"log"
 	"net/url"
 	"os"
 	"strconv"
@@ -19,7 +20,8 @@ type Config struct {
 	DatabaseURL string
 
 	// Redis
-	RedisURL string
+	RedisURL      string
+	RedisPassword string
 
 	// JWT
 	JWTSecret string
@@ -43,6 +45,7 @@ type Config struct {
 	// HTTP security
 	CORSAllowedOrigins []string
 	RateLimitPerMinute int
+	MaxBodyBytes       int64
 }
 
 // Load loads configuration from environment variables
@@ -53,6 +56,7 @@ func Load() *Config {
 		AppSecret:     getEnv("APP_SECRET_KEY", "change-me-in-production"),
 		DatabaseURL:   getEnv("DATABASE_URL", "postgres://obsevo:obsevo@localhost:5432/obsevo?sslmode=disable"),
 		RedisURL:      parseRedisAddr(getEnv("REDIS_URL", "redis://localhost:6379")),
+		RedisPassword: getEnv("REDIS_PASSWORD", ""),
 		JWTSecret:     getEnv("JWT_SECRET", "change-me-in-production"),
 		JWTExpiry:     getEnv("JWT_EXPIRY", "24h"),
 		UploadDir:     getEnv("UPLOAD_DIR", "./data/uploads"),
@@ -68,6 +72,7 @@ func Load() *Config {
 
 		CORSAllowedOrigins: splitAndTrim(getEnv("CORS_ALLOWED_ORIGINS", "")),
 		RateLimitPerMinute: getEnvAsInt("RATE_LIMIT_PER_MINUTE", 0),
+		MaxBodyBytes:       getEnvAsInt64("MAX_BODY_BYTES", 10<<20), // 10 MB default
 	}
 }
 
@@ -125,4 +130,20 @@ func parseRedisAddr(raw string) string {
 		return raw
 	}
 	return addr
+}
+
+// WarnDefaults logs warnings when security-sensitive variables are left at
+// their default values. It does not block startup — a developer running
+// locally should not be forced to set every variable — but it makes it
+// obvious when a production deployment has a placeholder secret.
+func (c *Config) WarnDefaults() {
+	if c.AppSecret == "" || c.AppSecret == "change-me-in-production" {
+		log.Println("WARN: APP_SECRET_KEY is set to a default value — change it for production")
+	}
+	if c.JWTSecret == "" || c.JWTSecret == "change-me-in-production" {
+		log.Println("WARN: JWT_SECRET is set to a default value — change it for production")
+	}
+	if c.RedisPassword == "" {
+		log.Println("WARN: REDIS_PASSWORD is not set — Redis has no authentication")
+	}
 }

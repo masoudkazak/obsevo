@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -251,5 +252,112 @@ func TestAPIKeyMiddleware_EmptyHeader(t *testing.T) {
 
 	if w.Code != http.StatusUnauthorized {
 		t.Errorf("expected status 401, got %d", w.Code)
+	}
+}
+
+func TestSecurityHeaders(t *testing.T) {
+	handler := api.SecurityHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	expectedHeaders := map[string]string{
+		"X-Content-Type-Options":    "nosniff",
+		"X-Frame-Options":           "DENY",
+		"Referrer-Policy":           "no-referrer",
+		"X-XSS-Protection":          "1; mode=block",
+		"Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+		"Content-Security-Policy":   "default-src 'self'",
+	}
+
+	for header, expected := range expectedHeaders {
+		got := w.Header().Get(header)
+		if !strings.Contains(got, expected) {
+			t.Errorf("header %q: expected to contain %q, got %q", header, expected, got)
+		}
+	}
+}
+
+func TestLimitBody(t *testing.T) {
+	// Handler that tries to read the body
+	handler := api.LimitBody(1024)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		buf := make([]byte, 2048)
+		n, err := r.Body.Read(buf)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		w.Write(buf[:n])
+	}))
+
+	// Send a body larger than the limit
+	body := strings.Repeat("x", 2048)
+	req := httptest.NewRequest("POST", "/test", strings.NewReader(body))
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code == http.StatusOK {
+		t.Error("expected error for body exceeding limit, got 200")
+	}
+}
+
+func TestLimitBody_UnderLimit(t *testing.T) {
+	handler := api.LimitBody(1024)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		buf := make([]byte, 1024)
+		n, _ := r.Body.Read(buf)
+		w.Write(buf[:n])
+	}))
+
+	body := strings.Repeat("x", 512)
+	req := httptest.NewRequest("POST", "/test", strings.NewReader(body))
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200 for body under limit, got %d", w.Code)
+	}
+}
+
+func TestRequestLogger(t *testing.T) {
+	handler := api.RequestLogger(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	// Should set X-Request-Id header on response
+	if w.Header().Get("X-Request-Id") == "" {
+		t.Error("expected X-Request-Id header to be set")
+	}
+}
+
+func TestRequestLogger_PreservesClientID(t *testing.T) {
+	handler := api.RequestLogger(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.Header.Set("X-Request-Id", "my-custom-id")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if got := w.Header().Get("X-Request-Id"); got != "my-custom-id" {
+		t.Errorf("expected X-Request-Id 'my-custom-id', got %q", got)
+	}
+}
+
+func TestSetupTestRouter(t *testing.T) {
+	r := setupTestRouter()
+	req := httptest.NewRequest("GET", "/health", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", w.Code)
 	}
 }

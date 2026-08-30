@@ -34,6 +34,9 @@ func main() {
 	// Log startup info
 	log.Printf("Starting Langfuse Light in %s mode", cfg.AppEnv)
 
+	// Warn about insecure defaults (does not block startup)
+	cfg.WarnDefaults()
+
 	// Connect to PostgreSQL
 	ctx := context.Background()
 	poolConfig, err := pgxpool.ParseConfig(cfg.DatabaseURL)
@@ -69,7 +72,8 @@ func main() {
 
 	// Connect to Redis
 	rdb := redis.NewClient(&redis.Options{
-		Addr: cfg.RedisURL,
+		Addr:     cfg.RedisURL,
+		Password: cfg.RedisPassword,
 	})
 	if err := rdb.Ping(ctx).Err(); err != nil {
 		log.Fatalf("Unable to connect to Redis: %v", err)
@@ -112,8 +116,8 @@ func main() {
 	r := chi.NewRouter()
 
 	// Middleware
-	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
+	r.Use(api.RequestLogger)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(30 * time.Second))

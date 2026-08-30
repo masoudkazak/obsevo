@@ -11,6 +11,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"sort"
 	"strings"
@@ -104,14 +105,15 @@ type registration struct {
 	hidden      bool
 }
 
-// Register adds an evaluator to the registry. It panics on a duplicate name,
-// because that can only be a programming error at init time.
+// Register adds an evaluator to the registry. Duplicate names are logged and
+// skipped rather than panicking, so a misconfiguration cannot crash the server.
 func Register(name, description string, factory Factory) {
 	registryMu.Lock()
 	defer registryMu.Unlock()
 
 	if _, exists := registry[name]; exists {
-		panic(fmt.Sprintf("evaluator %q registered twice", name))
+		log.Printf("WARN: evaluator %q already registered, skipping duplicate", name)
+		return
 	}
 	registry[name] = registration{factory: factory, description: description}
 }
@@ -125,10 +127,12 @@ func RegisterAlias(alias, target string) {
 
 	entry, ok := registry[target]
 	if !ok {
-		panic(fmt.Sprintf("alias %q points at unregistered evaluator %q", alias, target))
+		log.Printf("WARN: alias %q points at unregistered evaluator %q, skipping", alias, target)
+		return
 	}
 	if _, exists := registry[alias]; exists {
-		panic(fmt.Sprintf("evaluator %q registered twice", alias))
+		log.Printf("WARN: evaluator alias %q already registered, skipping duplicate", alias)
+		return
 	}
 	registry[alias] = registration{factory: entry.factory, description: entry.description, hidden: true}
 }

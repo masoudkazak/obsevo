@@ -8,6 +8,8 @@
   <a href="#quick-start">Quick Start</a> ·
   <a href="#sdk-usage">SDK Usage</a> ·
   <a href="#api-reference">API</a> ·
+  <a href="#migrating-from-langfuse">Migration</a> ·
+  <a href="#performance">Performance</a> ·
   <a href="#development">Development</a> ·
   <a href="#license">License</a>
 </p>
@@ -362,6 +364,76 @@ Contributions are welcome. Please open an issue first to discuss what you'd like
 3. Make your changes
 4. Run `make lint && make test` to verify
 5. Open a pull request
+
+## Migrating from Langfuse
+
+Obsevo is API-compatible with Langfuse. Switching is as simple as pointing your SDK at the new host:
+
+```bash
+export LANGFUSE_HOST=http://localhost:3001
+export LANGFUSE_PUBLIC_KEY=pk-lf-...
+export LANGFUSE_SECRET_KEY=sk-lf-...
+```
+
+The official Langfuse Python and JS SDKs work unmodified. To migrate history:
+
+```bash
+go run ./cmd/migrate-langfuse \
+  -source-host https://cloud.langfuse.com \
+  -source-public-key pk-lf-OLD -source-secret-key sk-lf-OLD \
+  -target-host http://localhost:3001 \
+  -target-public-key pk-lf-NEW -target-secret-key sk-lf-NEW \
+  -dry-run
+```
+
+Drop `-dry-run` when the summary looks right. See [docs/migration.md](docs/migration.md) for full details.
+
+## Performance
+
+Benchmarked against a 10,000 traces/min workload (4 observations per trace):
+
+| Metric | Value |
+|---|---|
+| Ingestion latency (p95) | 2.0 ms |
+| Worker drain time | 0.2 s |
+| Total RAM usage | ~217 MB |
+| Storage per event | ~1.1 KB |
+
+The system handles up to 60,000 traces/min with sub-2ms ingestion latency. See [docs/benchmark.md](docs/benchmark.md) for full results and reproduction steps.
+
+## Production Deployment
+
+### Resource Requirements
+
+| Component | Minimum | Recommended |
+|---|---|---|
+| RAM (total) | 512 MB | 1 GB |
+| CPU | 1 vCPU | 2 vCPU |
+| Disk | 1 GB | 10 GB |
+
+### Security Checklist
+
+- [ ] Set strong `JWT_SECRET` and `APP_SECRET_KEY` (32+ random characters)
+- [ ] Set strong `POSTGRES_PASSWORD`
+- [ ] Set `APP_ENV=production`
+- [ ] Don't expose PostgreSQL/Redis ports to public network
+- [ ] Use TLS termination (nginx, Caddy, or Traefik)
+
+### Backups
+
+```bash
+# Backup
+docker compose exec postgres pg_dump -U obsevo obsevo > backup_$(date +%Y%m%d).sql
+
+# Restore
+cat backup_20260824.sql | docker compose exec -T postgres psql -U obsevo obsevo
+```
+
+See [docs/deployment.md](docs/deployment.md) for nginx config and scaling notes.
+
+## API Specification
+
+Full OpenAPI 3.0 spec available at [docs/openapi.yaml](docs/openapi.yaml).
 
 ## License
 

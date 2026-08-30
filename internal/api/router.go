@@ -34,6 +34,7 @@ type Router struct {
 	rateLimiter       *RateLimiter
 	auditLogger       *AuditLogger
 	corsOrigins       []string
+	maxBody           int64
 }
 
 // RouterDeps carries the handlers and services the router wires together.
@@ -76,6 +77,7 @@ func NewRouter(deps RouterDeps) *Router {
 		rateLimiter:       NewRateLimiter(deps.Redis, rateLimitPerMinute(deps.Config)),
 		auditLogger:       NewAuditLogger(deps.Queries),
 		corsOrigins:       corsOrigins(deps.Config),
+		maxBody:           maxBodyBytes(deps.Config),
 	}
 }
 
@@ -93,6 +95,21 @@ func corsOrigins(cfg *config.Config) []string {
 		return nil
 	}
 	return cfg.CORSAllowedOrigins
+}
+
+func maxBodyBytes(cfg *config.Config) int64 {
+	if cfg == nil || cfg.MaxBodyBytes <= 0 {
+		return 10 << 20 // 10 MB default
+	}
+	return cfg.MaxBodyBytes
+}
+
+// maxBodyBytes returns the configured body size limit.
+func (rt *Router) maxBodyBytes() int64 {
+	if rt.maxBody <= 0 {
+		return 10 << 20
+	}
+	return rt.maxBody
 }
 
 // RegisterRoutes registers all API routes on the given chi.Router.
@@ -120,6 +137,7 @@ func (rt *Router) RegisterRoutes(r chi.Router) {
 	r.Route("/api", func(r chi.Router) {
 		r.Use(CORS(rt.corsOrigins))
 		r.Use(SecurityHeaders)
+		r.Use(LimitBody(rt.maxBodyBytes()))
 
 		// Credential endpoints are throttled hardest: they are the ones worth
 		// guessing at, and a legitimate client calls them rarely.

@@ -626,3 +626,42 @@ func mustJSON(v interface{}) string {
 	}
 	return string(encoded)
 }
+
+func TestRegisterDuplicateDoesNotPanic(t *testing.T) {
+	// Registering the same evaluator name twice should log a warning and skip,
+	// not panic and crash the server.
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("Register panicked on duplicate: %v", r)
+		}
+	}()
+
+	// The first registration already happened in init(). Registering again
+	// must not panic.
+	evaluator.Register("exact_match", "duplicate", func(json.RawMessage, evaluator.Deps) (evaluator.Evaluator, error) {
+		return nil, nil
+	})
+}
+
+func TestRegisterAliasMissingTargetDoesNotPanic(t *testing.T) {
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("RegisterAlias panicked on missing target: %v", r)
+		}
+	}()
+
+	// This alias points at a non-existent evaluator; must log and skip.
+	evaluator.RegisterAlias("nonexistent_alias_xyz", "nonexistent_target_xyz")
+}
+
+func TestRegisterAliasDuplicateDoesNotPanic(t *testing.T) {
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("RegisterAlias panicked on duplicate: %v", r)
+		}
+	}()
+
+	// length_check is already registered as an alias of length in init().
+	// Registering it again must not panic.
+	evaluator.RegisterAlias("length_check", "length")
+}
