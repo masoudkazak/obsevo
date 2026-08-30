@@ -135,11 +135,11 @@ type migrator struct {
 	warnings []string
 }
 
-func (m *migrator) count(resource string, n int) {
+func (m *migrator) count(resource string) {
 	if m.counts == nil {
 		m.counts = make(map[string]int)
 	}
-	m.counts[resource] += n
+	m.counts[resource]++
 }
 
 func (m *migrator) warn(format string, args ...interface{}) {
@@ -203,7 +203,7 @@ func (m *migrator) migrateTraces(ctx context.Context) error {
 			body := traceEventBody(trace)
 			m.rewriteIDs(body, "id")
 			events = append(events, event("trace-create", body))
-			m.count("traces", 1)
+			m.count("traces")
 
 			observations, err := m.fetchObservations(ctx, traceID)
 			if err != nil {
@@ -213,7 +213,7 @@ func (m *migrator) migrateTraces(ctx context.Context) error {
 			for _, observation := range observations {
 				m.rewriteIDs(observation, "id", "traceId", "parentObservationId")
 				events = append(events, event(observationEventType(observation), observation))
-				m.count("observations", 1)
+				m.count("observations")
 			}
 
 			if len(events) >= writeBatchSize {
@@ -328,7 +328,7 @@ func (m *migrator) migrateScores(ctx context.Context) error {
 		for _, score := range response.Data {
 			m.rewriteIDs(score, "id", "traceId", "observationId")
 			events = append(events, event("score-create", score))
-			m.count("scores", 1)
+			m.count("scores")
 		}
 		if err := m.push(ctx, events); err != nil {
 			return err
@@ -385,14 +385,14 @@ func (m *migrator) migratePrompts(ctx context.Context) error {
 			}
 
 			if m.dryRun {
-				m.count("prompts", 1)
+				m.count("prompts")
 				continue
 			}
 			if err := m.target.post(ctx, "/api/public/v2/prompts", body, nil); err != nil {
 				m.warn("prompt %s v%d: %v", entry.Name, version, err)
 				continue
 			}
-			m.count("prompts", 1)
+			m.count("prompts")
 		}
 	}
 
@@ -433,7 +433,7 @@ func (m *migrator) migrateDatasets(ctx context.Context) error {
 				continue
 			}
 		}
-		m.count("datasets", 1)
+		m.count("datasets")
 
 		for _, item := range detail.Items {
 			body := map[string]interface{}{"datasetName": dataset.Name}
@@ -448,14 +448,14 @@ func (m *migrator) migrateDatasets(ctx context.Context) error {
 			m.rewriteIDs(body, "id", "sourceTraceId", "sourceObservationId")
 
 			if m.dryRun {
-				m.count("dataset items", 1)
+				m.count("dataset items")
 				continue
 			}
 			if err := m.target.post(ctx, "/api/public/dataset-items", body, nil); err != nil {
 				m.warn("dataset %s item: %v", dataset.Name, err)
 				continue
 			}
-			m.count("dataset items", 1)
+			m.count("dataset items")
 		}
 
 		// Dataset runs reference traces that may not have been migrated, and

@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 
@@ -66,7 +65,8 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if user already exists
-	existingUser, _ := h.queries.GetUserByEmail(context.Background(), req.Email)
+	ctx := r.Context()
+	existingUser, _ := h.queries.GetUserByEmail(ctx, req.Email)
 	if existingUser.ID != "" {
 		writeError(w, http.StatusConflict, "user with this email already exists")
 		return
@@ -80,7 +80,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create user
-	user, err := h.queries.CreateUser(context.Background(), db.CreateUserParams{
+	user, err := h.queries.CreateUser(ctx, db.CreateUserParams{
 		Email:        req.Email,
 		PasswordHash: hashedPassword,
 		Name:         pgtype.Text{String: req.Name, Valid: req.Name != ""},
@@ -91,17 +91,16 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Auto-create default organization, member, and project
-	ctx := context.Background()
 	org, err := h.queries.CreateOrganization(ctx, "My Organization")
 	if err == nil {
-		h.queries.CreateMember(ctx, db.CreateMemberParams{
+		_, _ = h.queries.CreateMember(ctx, db.CreateMemberParams{
 			UserID: user.ID,
 			OrgID:  org.ID,
 			Role:   "ADMIN",
 		})
 		projects, _ := h.queries.GetProjectsByOrgID(ctx, org.ID)
 		if len(projects) == 0 {
-			h.queries.CreateProject(ctx, db.CreateProjectParams{Name: "My Project", OrgID: org.ID})
+			_, _ = h.queries.CreateProject(ctx, db.CreateProjectParams{Name: "My Project", OrgID: org.ID})
 		}
 	}
 
@@ -136,7 +135,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get user by email
-	user, err := h.queries.GetUserByEmail(context.Background(), req.Email)
+	user, err := h.queries.GetUserByEmail(r.Context(), req.Email)
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, "invalid email or password")
 		return
@@ -174,7 +173,7 @@ func (h *AuthHandler) RegisterRoutes(r chi.Router) {
 func writeJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(data)
+	_ = json.NewEncoder(w).Encode(data)
 }
 
 func writeError(w http.ResponseWriter, status int, message string) {

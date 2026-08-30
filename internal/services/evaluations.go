@@ -109,12 +109,12 @@ func (s *EvaluationService) CreateScore(ctx context.Context, projectID string, r
 	// An observation implies its trace; fill it in so trace-scoped queries see
 	// observation-level scores.
 	if req.TraceID == "" && req.ObservationID != "" {
-		obs, err := s.queries.GetObservationByIDAndProject(ctx, db.GetObservationByIDAndProjectParams{
+		obs, obsErr := s.queries.GetObservationByIDAndProject(ctx, db.GetObservationByIDAndProjectParams{
 			ID:        req.ObservationID,
 			ProjectID: projectID,
 		})
-		if err != nil {
-			return db.Score{}, fmt.Errorf("resolving observation for score: %w", err)
+		if obsErr != nil {
+			return db.Score{}, fmt.Errorf("resolving observation for score: %w", obsErr)
 		}
 		req.TraceID = obs.TraceID
 	}

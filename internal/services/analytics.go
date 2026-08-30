@@ -322,17 +322,17 @@ func (s *EvaluationService) GetDashboardSummary(ctx context.Context, filter Anal
 
 	// The remaining aggregates are independent; a failure in one should not
 	// blank the whole dashboard, so each falls back to its zero value.
-	if cost, err := s.GetCostStats(ctx, filter.ProjectID); err == nil {
-		summary.Cost = cost
+	if costResult, costErr := s.GetCostStats(ctx, filter.ProjectID); costErr == nil {
+		summary.Cost = costResult
 	}
-	if tokens, err := s.GetTokenUsageStats(ctx, filter.ProjectID); err == nil {
-		summary.TokenUsage = tokens
+	if tokenResult, tokenErr := s.GetTokenUsageStats(ctx, filter.ProjectID); tokenErr == nil {
+		summary.TokenUsage = tokenResult
 	}
-	if errors, err := s.GetErrorRateStats(ctx, filter.ProjectID); err == nil {
-		summary.ErrorRate = errors
+	if errorResult, errorErr := s.GetErrorRateStats(ctx, filter.ProjectID); errorErr == nil {
+		summary.ErrorRate = errorResult
 	}
-	if models, err := s.GetModelUsage(ctx, filter); err == nil {
-		summary.Models = models
+	if modelsResult, modelsErr := s.GetModelUsage(ctx, filter); modelsErr == nil {
+		summary.Models = modelsResult
 	} else {
 		summary.Models = []ModelUsage{}
 	}

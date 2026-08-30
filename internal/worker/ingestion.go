@@ -153,7 +153,7 @@ func (w *Worker) Start(ctx context.Context) {
 	// flush still needs to reach the database.
 	final, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	w.flushAggregates(final)
+	w.flushAggregates(final) //nolint:contextcheck // Intentional: parent may be cancelled during shutdown.
 }
 
 // dispatch reads the queue and routes each item to its trace's shard.

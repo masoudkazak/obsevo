@@ -1,37 +1,58 @@
-# Obsevo
+<h1 align="center">Obsevo</h1>
 
-A lightweight, self-hosted, MIT-licensed LLM observability platform.
+<p align="center">
+  <strong>Open-source LLM observability. Your data stays yours.</strong>
+</p>
 
-Built with **Go** (backend) + **SvelteKit** (frontend) + **PostgreSQL** + **Redis**.
+<p align="center">
+  <a href="#quick-start">Quick Start</a> ·
+  <a href="#sdk-usage">SDK Usage</a> ·
+  <a href="#api-reference">API</a> ·
+  <a href="#development">Development</a> ·
+  <a href="#license">License</a>
+</p>
+
+---
+
+Obsevo is a lightweight alternative to [Langfuse](https://langfuse.com) built for teams that want full control over their LLM data. Trace every prompt, completion, and tool call. Version your prompts. Run evaluations. Ship with confidence.
+
+**3 containers. ~300MB RAM. Under 3 minutes to deploy.**
 
 ## Features
 
-- **LLM Tracing** — Hierarchical traces (Trace → Observation) with metadata, model info, token usage, cost
-- **Prompt Management** — Versioning, template compilation with `{{variables}}`, active version control
-- **Evaluation & Scoring** — Score CRUD, LLM-as-a-judge evaluators, aggregation, analytics
-- **Datasets** — Test sets, batch evaluation runs, CSV/JSON import/export
-- **Analytics Dashboard** — Cost, latency, token usage, error rate over time with charts
-- **SDK Compatibility** — Python/JS SDK compatible API endpoints (`/api/public/`)
-- **Auth** — JWT-based authentication, organization/project management, role-based access (viewer/editor/admin)
-- **API Keys** — Project-level API keys for SDK ingestion
+| Feature | Description |
+|---|---|
+| **LLM Tracing** | Hierarchical traces (Trace → Observation) with metadata, model info, token usage, and cost tracking |
+| **Prompt Management** | Versioned prompts with `{{variable}}` template compilation and active version control |
+| **Evaluation & Scoring** | Score CRUD, LLM-as-a-judge evaluators, aggregation, and analytics |
+| **Datasets** | Test sets, batch evaluation runs, CSV/JSON import & export |
+| **Analytics Dashboard** | Cost, latency, token usage, error rate over time with interactive charts |
+| **SDK Compatibility** | Drop-in Python & JS SDKs with the same API surface as Langfuse |
+| **Auth & RBAC** | JWT authentication, organizations, projects, and role-based access (viewer/editor/admin) |
+| **API Keys** | Project-level API keys for SDK ingestion |
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                   Obsevo                             │
-├─────────────────────────────────────────────────────┤
-│  Frontend:  SvelteKit (Tailwind CSS v4, Chart.js)   │
-│  Backend:   Go (Chi router + sqlc)                  │
-│  Worker:    Goroutines in same Go process           │
-├─────────────────────────────────────────────────────┤
-│  Database:  PostgreSQL 16 (single DB)               │
-│  Cache:     Redis 7 (queue + cache)                 │
-│  Storage:   Local disk (Docker volume)              │
-└─────────────────────────────────────────────────────┘
+                    ┌──────────────────┐
+                    │    SvelteKit     │
+                    │   (Tailwind v4)  │
+                    └────────┬─────────┘
+                             │
+                    ┌────────▼─────────┐
+                    │   Go API Server  │
+                    │  (Chi + sqlc)    │
+                    └──┬──────────┬────┘
+                       │          │
+              ┌────────▼──┐  ┌───▼────────┐
+              │ PostgreSQL │  │   Redis    │
+              │    16      │  │     7      │
+              └────────────┘  └────────────┘
 ```
 
-**3-4 containers**. ~200-400MB RAM. Self-hosted.
+- **4 containers**: `api`, `web`, `postgres`, `redis`
+- **No external dependencies**: no ClickHouse, no S3, no object storage
+- **Worker**: goroutines inside the same Go process (no separate queue service)
 
 ## Quick Start
 
@@ -40,10 +61,10 @@ Built with **Go** (backend) + **SvelteKit** (frontend) + **PostgreSQL** + **Redi
 - Docker Engine 20.10+
 - Docker Compose v2+
 
-### 1. Clone and configure
+### 1. Clone & configure
 
 ```bash
-git clone <repo-url> obsevo
+git clone https://github.com/obsevo/obsevo.git
 cd obsevo
 cp .env.example .env
 ```
@@ -51,20 +72,27 @@ cp .env.example .env
 ### 2. Generate secrets
 
 ```bash
-openssl rand -base64 48  # Use for JWT_SECRET
-openssl rand -base64 48  # Use for APP_SECRET_KEY
-openssl rand -base64 16  # Use for POSTGRES_PASSWORD
+# JWT_SECRET
+openssl rand -base64 48
+
+# APP_SECRET_KEY
+openssl rand -base64 48
+
+# POSTGRES_PASSWORD
+openssl rand -base64 16
 ```
 
-### 3. Start
+Paste the values into your `.env` file.
+
+### 3. Start everything
 
 ```bash
 docker-compose up -d
 ```
 
-The API is available at `http://localhost:3001` (default).
+The API is available at **http://localhost:3001**.
 
-### 4. Create an account
+### 4. Create your account
 
 ```bash
 curl -X POST http://localhost:3001/api/auth/register \
@@ -72,7 +100,187 @@ curl -X POST http://localhost:3001/api/auth/register \
   -d '{"email":"you@example.com","password":"yourpassword","name":"Your Name"}'
 ```
 
-Then log in at `http://localhost:3001` in your browser (or use the API).
+Open **http://localhost:3001** in your browser and log in.
+
+## SDK Usage
+
+Obsevo ships with Python and TypeScript SDKs that are compatible with the Langfuse API.
+
+### Python
+
+```python
+from langfuse_light import Langfuse
+
+client = Langfuse(
+    public_key="pk-...",
+    secret_key="sk-...",
+    host="http://localhost:3001"
+)
+
+# Create a trace
+trace = client.trace(
+    name="my-trace",
+    user_id="user-123",
+    metadata={"env": "production"}
+)
+
+# Add an observation (span/generation)
+span = trace.span(
+    name="llm-call",
+    model="gpt-4",
+    input={"prompt": "Hello"},
+    output={"completion": "Hi there!"},
+    usage={"input": 10, "output": 5}
+)
+
+# Score the trace
+trace.score(name="quality", value=1, comment="Looks good")
+
+client.flush()
+```
+
+### TypeScript
+
+```typescript
+import { Langfuse } from "langfuse-light";
+
+const client = new Langfuse({
+  publicKey: "pk-...",
+  secretKey: "sk-...",
+  baseUrl: "http://localhost:3001",
+});
+
+// Create a trace
+const trace = client.trace({
+  name: "my-trace",
+  userId: "user-123",
+  metadata: { env: "production" },
+});
+
+// Add an observation
+await trace.span({
+  name: "llm-call",
+  model: "gpt-4",
+  input: { prompt: "Hello" },
+  output: { completion: "Hi there!" },
+  usage: { input: 10, output: 5 },
+});
+
+// Score the trace
+await trace.score({ name: "quality", value: 1, comment: "Looks good" });
+
+await client.shutdownAsync();
+```
+
+## API Reference
+
+### Authentication
+
+| Method | Header | Description |
+|---|---|---|
+| User session | `Authorization: Bearer <jwt>` | For dashboard & management API |
+| SDK ingestion | `x-api-key: <key>` | For programmatic trace ingestion |
+
+### Endpoints
+
+<details>
+<summary><strong>Auth</strong></summary>
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/api/auth/register` | Register a new user |
+| `POST` | `/api/auth/login` | Login and receive JWT |
+| `GET` | `/health` | Health check |
+
+</details>
+
+<details>
+<summary><strong>Traces & Observations</strong></summary>
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/traces` | List traces |
+| `POST` | `/api/traces` | Create a trace |
+| `GET` | `/api/traces/{id}` | Get trace with observations |
+| `POST` | `/api/observations` | Create an observation |
+| `POST` | `/api/public/traces` | Create trace (SDK) |
+| `GET` | `/api/public/traces` | List traces (SDK) |
+| `GET` | `/api/public/traces/{traceId}` | Get trace (SDK) |
+| `POST` | `/api/public/observations` | Create observation (SDK) |
+| `POST` | `/api/public/ingestion` | Batch ingestion (SDK) |
+
+</details>
+
+<details>
+<summary><strong>Prompts</strong></summary>
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/prompts` | List prompts |
+| `POST` | `/api/prompts` | Create prompt |
+| `PUT` | `/api/prompts/{name}` | Update prompt (new version) |
+
+</details>
+
+<details>
+<summary><strong>Evaluation & Scoring</strong></summary>
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/scores` | List scores |
+| `POST` | `/api/scores` | Create a score |
+| `GET` | `/api/analytics` | Analytics summary |
+
+</details>
+
+<details>
+<summary><strong>Datasets</strong></summary>
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/datasets` | List datasets |
+| `POST` | `/api/datasets` | Create a dataset |
+| `GET` | `/api/datasets/{id}/items` | List items |
+| `POST` | `/api/datasets/{id}/import` | Import JSON/CSV |
+| `GET` | `/api/datasets/{id}/export` | Export JSON/CSV |
+| `GET` | `/api/datasets/{id}/runs` | List runs |
+| `POST` | `/api/datasets/{id}/runs` | Create a run |
+
+</details>
+
+<details>
+<summary><strong>Management</strong></summary>
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/organizations` | List organizations |
+| `POST` | `/api/organizations` | Create organization |
+| `GET` | `/api/projects` | List projects |
+| `POST` | `/api/projects` | Create project |
+| `GET` | `/api/api-keys` | List API keys |
+| `POST` | `/api/api-keys` | Create API key |
+| `GET` | `/api/members` | List members |
+| `GET` | `/api/profile` | Get profile |
+| `PUT` | `/api/profile` | Update profile |
+
+</details>
+
+## Configuration
+
+All configuration is via environment variables. See [`.env.example`](.env.example) for the full list.
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `DATABASE_URL` | Yes | — | PostgreSQL connection string |
+| `REDIS_URL` | No | `redis://localhost:6379` | Redis connection string |
+| `JWT_SECRET` | Yes | — | Secret for JWT signing |
+| `APP_SECRET_KEY` | Yes | — | Application secret key |
+| `APP_PORT` | No | `3001` | API server port |
+| `APP_ENV` | No | `development` | `development` / `production` |
+| `LOG_LEVEL` | No | `info` | `debug` / `info` / `warn` / `error` |
+| `RATE_LIMIT_PER_MINUTE` | No | `0` (disabled) | Per-minute rate limit per client |
+| `WORKER_CONCURRENCY` | No | `0` (auto) | Ingestion worker pool size |
+| `DB_MAX_CONNS` | No | `20` | PostgreSQL connection pool ceiling |
 
 ## Development
 
@@ -82,12 +290,12 @@ Then log in at `http://localhost:3001` in your browser (or use the API).
 - Node.js 18+
 - PostgreSQL 16
 - Redis 7
-- sqlc (`go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest`)
+- [sqlc](https://sqlc.dev) (`go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest`)
 
 ### Setup
 
 ```bash
-# Start database and Redis
+# Start infrastructure
 docker-compose up -d postgres redis
 
 # Install frontend dependencies
@@ -96,7 +304,7 @@ cd web && npm install && cd ..
 # Generate sqlc code
 make sqlc-generate
 
-# Run the API
+# Run the API server
 make run
 
 # In another terminal, run the frontend dev server
@@ -108,84 +316,53 @@ cd web && npm run dev
 | Command | Description |
 |---|---|
 | `make build` | Build the Go binary |
-| `make run` | Run the application |
+| `make run` | Run the API server |
 | `make test` | Run all tests |
 | `make test-coverage` | Run tests with coverage report |
-| `make lint` | Run linter |
-| `make fmt` | Format code |
+| `make lint` | Run golangci-lint |
+| `make fmt` | Format code with gofmt |
 | `make vet` | Run go vet |
 | `make sqlc-generate` | Regenerate sqlc code |
-| `make docker-up` | Start Docker containers |
-| `make docker-down` | Stop Docker containers |
-
-## API Endpoints
-
-### Public (no auth)
-- `POST /api/auth/register` — Register user
-- `POST /api/auth/login` — Login
-- `GET /health` — Health check
-
-### Protected (JWT Bearer token)
-- `GET/POST /api/organizations` — Organization CRUD
-- `GET/POST /api/projects` — Project CRUD
-- `GET/POST /api/traces` — Trace list/create
-- `GET /api/traces/{id}` — Trace detail with observations
-- `GET/POST /api/observations` — Observation list/create
-- `GET/POST /api/prompts` — Prompt list/create
-- `PUT /api/prompts/{name}` — Update prompt (new version)
-- `GET/POST /api/scores` — Score list/create
-- `GET /api/analytics` — Analytics summary
-- `GET/POST /api/datasets` — Dataset list/create
-- `GET/POST /api/datasets/{id}/items` — Dataset items
-- `POST /api/datasets/{id}/import` — Import JSON/CSV
-- `GET /api/datasets/{id}/export` — Export JSON/CSV
-- `GET/POST /api/datasets/{id}/runs` — Dataset runs
-- `GET/POST /api/api-keys` — API key management
-- `GET /api/members` — Member management
-- `GET/PUT /api/profile` — User profile
-
-### SDK-compatible (API key auth via `x-api-key` header)
-- `POST /api/public/traces` — Create trace
-- `GET /api/public/traces` — List traces
-- `GET /api/public/traces/{traceId}` — Get trace
-- `POST /api/public/observations` — Create observation
-- `POST /api/public/ingestion` — Batch ingestion
+| `make docker-up` | Start all Docker containers |
+| `make docker-down` | Stop all Docker containers |
+| `make install-tools` | Install dev dependencies |
+| `make benchmark` | Run ingestion benchmarks |
 
 ## Project Structure
 
 ```
 obsevo/
-├── cmd/server/main.go           # Entry point
+├── cmd/server/main.go            # Entry point
 ├── internal/
-│   ├── config/config.go         # Env-based config
-│   ├── db/                      # sqlc generated code
-│   ├── auth/                    # JWT, password hashing, middleware
-│   ├── api/                     # HTTP handlers + router
-│   ├── services/                # Business logic
-│   ├── queue/                   # Redis queue
-│   └── worker/                  # Background processor
-├── migrations/                  # PostgreSQL migrations
-├── web/                         # SvelteKit frontend
-├── tests/                       # Unit & integration tests
+│   ├── config/config.go          # Environment-based configuration
+│   ├── db/                       # sqlc generated code (do not edit)
+│   ├── auth/                     # JWT, password hashing, middleware
+│   ├── api/                      # HTTP handlers + Chi router
+│   ├── services/                 # Business logic
+│   ├── queue/                    # Redis queue
+│   └── worker/                   # Background ingestion processor
+├── migrations/                   # PostgreSQL migrations
+├── sdk/
+│   ├── python/                   # Python SDK (langfuse-light)
+│   └── typescript/               # TypeScript SDK
+├── web/                          # SvelteKit frontend
+├── tests/                        # Unit & integration tests
 ├── docker-compose.yml
 ├── Dockerfile
 ├── Makefile
 └── .env.example
 ```
 
-## Environment Variables
+## Contributing
 
-See `.env.example` for all available configuration. Key variables:
+Contributions are welcome. Please open an issue first to discuss what you'd like to change.
 
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `DATABASE_URL` | Yes | — | PostgreSQL connection string |
-| `REDIS_URL` | No | `localhost:6379` | Redis address |
-| `JWT_SECRET` | Yes | — | Secret for JWT signing |
-| `APP_SECRET_KEY` | Yes | — | Application secret key |
-| `APP_PORT` | No | `3001` | API server port |
-| `APP_ENV` | No | `development` | Environment (development/production) |
+1. Fork the repo
+2. Create a feature branch (`git checkout -b feat/my-feature`)
+3. Make your changes
+4. Run `make lint && make test` to verify
+5. Open a pull request
 
 ## License
 
-MIT
+[MIT](LICENSE)

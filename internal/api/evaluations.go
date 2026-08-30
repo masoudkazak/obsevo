@@ -411,6 +411,8 @@ func (h *EvaluationHandler) GetMetricsOverTime(w http.ResponseWriter, r *http.Re
 }
 
 // RegisterRoutes registers evaluation routes.
+//
+//nolint:dupl // Route registration is structurally similar to other handlers but semantically distinct.
 func (h *EvaluationHandler) RegisterRoutes(r chi.Router) {
 	r.Post("/scores", h.CreateScore)
 	r.Get("/scores", h.ListScores)

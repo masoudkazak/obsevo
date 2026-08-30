@@ -211,17 +211,16 @@ func runMigrations(ctx context.Context, pool *pgxpool.Pool, dir string) error {
 			continue
 		}
 
-		data, err := os.ReadFile(filepath.Join(dir, name))
-		if err != nil {
-			return fmt.Errorf("reading migration %s: %w", name, err)
+		data, readErr := os.ReadFile(filepath.Join(dir, name))
+		if readErr != nil {
+			return fmt.Errorf("reading migration %s: %w", name, readErr)
 		}
-		if _, err := pool.Exec(ctx, string(data)); err != nil {
-			return fmt.Errorf("executing migration %s: %w", name, err)
+		if _, execErr := pool.Exec(ctx, string(data)); execErr != nil {
+			return fmt.Errorf("executing migration %s: %w", name, execErr)
 		}
 
-		_, err = pool.Exec(ctx, `INSERT INTO schema_migrations (filename) VALUES ($1)`, name)
-		if err != nil {
-			return fmt.Errorf("recording migration %s: %w", name, err)
+		if _, recordErr := pool.Exec(ctx, `INSERT INTO schema_migrations (filename) VALUES ($1)`, name); recordErr != nil {
+			return fmt.Errorf("recording migration %s: %w", name, recordErr)
 		}
 		log.Printf("Applied migration: %s", name)
 	}

@@ -384,6 +384,9 @@ func (p *parser) parsePrimary() (exprNode, error) {
 		p.advance()
 		return inner, nil
 
+	case tokenEOF, tokenOperator, tokenRParen, tokenComma:
+		return nil, fmt.Errorf("unexpected token %q at position %d", tok.text, tok.pos)
+
 	default:
 		return nil, fmt.Errorf("unexpected token at position %d", tok.pos)
 	}

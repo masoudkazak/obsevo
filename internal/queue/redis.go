@@ -3,6 +3,7 @@ package queue
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -61,7 +62,7 @@ func (q *Queue) Enqueue(ctx context.Context, item IngestionItem) error {
 func (q *Queue) Dequeue(ctx context.Context) (*IngestionItem, error) {
 	data, err := q.client.LPop(ctx, ingestionQueueKey).Bytes()
 	if err != nil {
-		if err == redis.Nil {
+		if errors.Is(err, redis.Nil) {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("popping from ingestion queue: %w", err)
@@ -81,7 +82,7 @@ func (q *Queue) Dequeue(ctx context.Context) (*IngestionItem, error) {
 func (q *Queue) DequeueBlocking(ctx context.Context, timeout time.Duration) (*IngestionItem, error) {
 	res, err := q.client.BLPop(ctx, timeout, ingestionQueueKey).Result()
 	if err != nil {
-		if err == redis.Nil || ctx.Err() != nil {
+		if errors.Is(err, redis.Nil) || ctx.Err() != nil {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("blocking pop from ingestion queue: %w", err)

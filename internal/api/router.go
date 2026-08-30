@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 
@@ -100,7 +99,7 @@ func corsOrigins(cfg *config.Config) []string {
 func (rt *Router) RegisterRoutes(r chi.Router) {
 	// Health check — verifies DB connectivity
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.Background()
+		ctx := r.Context()
 		status := "ok"
 		code := http.StatusOK
 
@@ -111,7 +110,7 @@ func (rt *Router) RegisterRoutes(r chi.Router) {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(code)
-		json.NewEncoder(w).Encode(map[string]string{
+		_ = json.NewEncoder(w).Encode(map[string]string{
 			"status":  status,
 			"service": "obsevo",
 		})

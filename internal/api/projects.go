@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 
@@ -60,15 +59,16 @@ func (h *ProjectHandler) CreateOrganization(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Create organization
-	org, err := h.queries.CreateOrganization(context.Background(), req.Name)
+	ctx := r.Context()
+	org, err := h.queries.CreateOrganization(ctx, req.Name)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to create organization")
 		return
 	}
 
 	// Add current user as ADMIN of the organization
-	userID := auth.GetUserID(r.Context())
-	_, err = h.queries.CreateMember(context.Background(), db.CreateMemberParams{
+	userID := auth.GetUserID(ctx)
+	_, err = h.queries.CreateMember(ctx, db.CreateMemberParams{
 		UserID: userID,
 		OrgID:  org.ID,
 		Role:   "ADMIN",
@@ -129,7 +129,7 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 
 	orgID := orgs[0].ID
 
-	project, err := h.queries.CreateProject(context.Background(), db.CreateProjectParams{
+	project, err := h.queries.CreateProject(r.Context(), db.CreateProjectParams{
 		Name:  req.Name,
 		OrgID: orgID,
 	})

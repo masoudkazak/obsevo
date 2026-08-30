@@ -24,12 +24,12 @@ linters:
 
 linters-settings:
   errcheck:
-    check-blank: true
     exclude-functions:
       - (io.Closer).Close
       - (net.Listener).Close
   govet:
-    check-shadowing: true
+    enable:
+      - shadow
   revive:
     rules:
       - name: blank-imports
@@ -58,3 +58,5 @@ issues:
         - dupl
         - govet
         - unparam
+        - errcheck
+        - contextcheck

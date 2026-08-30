@@ -484,6 +484,8 @@ func (h *DatasetHandler) CompareRuns(w http.ResponseWriter, r *http.Request) {
 }
 
 // RegisterRoutes registers dataset, run and experiment routes.
+//
+//nolint:dupl // Route registration is structurally similar to other handlers but semantically distinct.
 func (h *DatasetHandler) RegisterRoutes(r chi.Router) {
 	r.Post("/datasets", h.CreateDataset)
 	r.Get("/datasets", h.ListDatasets)

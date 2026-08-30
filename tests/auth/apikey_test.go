@@ -82,7 +82,9 @@ func TestDisplaySecretRevealsOnlyTheTail(t *testing.T) {
 }
 
 func TestHashSecretKeyIsDeterministicAndDistinct(t *testing.T) {
-	if auth.HashSecretKey("sk-lf-a") != auth.HashSecretKey("sk-lf-a") {
+	a := auth.HashSecretKey("sk-lf-a")
+	b := auth.HashSecretKey("sk-lf-a")
+	if a != b {
 		t.Error("expected hashing to be deterministic")
 	}
 	if auth.HashSecretKey("sk-lf-a") == auth.HashSecretKey("sk-lf-b") {

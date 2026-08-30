@@ -247,7 +247,7 @@ func (s *DatasetService) ImportItemsJSON(ctx context.Context, projectID, dataset
 		return nil, fmt.Errorf("decoding JSON: %w", err)
 	}
 
-	var created []db.DatasetItem
+	created := make([]db.DatasetItem, 0, len(items))
 	for _, item := range items {
 		if len(item.Input) == 0 {
 			continue
@@ -289,7 +289,7 @@ func (s *DatasetService) ImportItemsCSV(ctx context.Context, projectID, datasetI
 		}
 	}
 
-	var created []db.DatasetItem
+	created := make([]db.DatasetItem, 0, len(records)-startIdx)
 	for _, record := range records[startIdx:] {
 		if len(record) == 0 || strings.TrimSpace(record[0]) == "" {
 			continue
@@ -447,7 +447,7 @@ func (s *DatasetService) EnsureRunByName(ctx context.Context, projectID, dataset
 	if err != nil {
 		return db.DatasetRun{}, fmt.Errorf("dataset item not found: %w", err)
 	}
-	if _, err := s.requireDataset(ctx, projectID, item.DatasetID); err != nil {
+	if _, err = s.requireDataset(ctx, projectID, item.DatasetID); err != nil {
 		return db.DatasetRun{}, err
 	}
 
