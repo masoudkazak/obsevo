@@ -36,7 +36,17 @@ func main() {
 
 	// Connect to PostgreSQL
 	ctx := context.Background()
-	pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
+	poolConfig, err := pgxpool.ParseConfig(cfg.DatabaseURL)
+	if err != nil {
+		log.Fatalf("Invalid DATABASE_URL: %v", err)
+	}
+	// The ingestion shards and the HTTP handlers share this pool; sizing it
+	// only for request concurrency starves the worker under load.
+	if cfg.DBMaxConns > 0 {
+		poolConfig.MaxConns = cfg.DBMaxConns
+	}
+
+	pool, err := pgxpool.NewWithConfig(ctx, poolConfig)
 	if err != nil {
 		log.Fatalf("Unable to connect to database: %v", err)
 	}
@@ -77,20 +87,25 @@ func main() {
 	promptService := services.NewPromptService(queries)
 	evalService := services.NewEvaluationService(queries)
 	datasetService := services.NewDatasetService(queries)
-	evaluatorService := services.NewEvaluatorConfigService(queries)
+	costService := services.NewCostService(queries)
+	experimentService := services.NewExperimentService(queries)
+	evaluatorService := services.NewEvaluatorConfigService(queries, cfg.EvaluatorTimeout)
 
 	// Initialize queue and worker
 	ingestionQueue := queue.NewQueue(rdb)
-	ingestionWorker := worker.NewWorker(ingestionQueue, traceService, 1*time.Second)
+	ingestionWorker := worker.NewWorker(ingestionQueue, traceService, evalService, costService, cfg.WorkerConcurrency)
 
-	// Start background worker
-	go ingestionWorker.Start(ctx)
+	// The worker owns its own cancellable context so shutdown can unblock the
+	// Redis read without tearing down in-flight HTTP requests.
+	workerCtx, stopWorker := context.WithCancel(ctx)
+	defer stopWorker()
+	go ingestionWorker.Start(workerCtx)
 
 	// Initialize handlers
 	traceHandler := api.NewTraceHandler(traceService)
 	promptHandler := api.NewPromptHandler(promptService)
 	evalHandler := api.NewEvaluationHandler(evalService)
-	datasetHandler := api.NewDatasetHandler(datasetService)
+	datasetHandler := api.NewDatasetHandler(datasetService, experimentService)
 	evaluatorHandler := api.NewEvaluatorHandler(evaluatorService)
 
 	// Setup router
@@ -104,7 +119,23 @@ func main() {
 	r.Use(middleware.Timeout(30 * time.Second))
 
 	// Register all routes
-	apiRouter := api.NewRouter(queries, pool, jwtService, traceHandler, promptHandler, evalHandler, datasetHandler, evaluatorHandler)
+	apiRouter := api.NewRouter(api.RouterDeps{
+		Queries:           queries,
+		DBPool:            pool,
+		JWTService:        jwtService,
+		Queue:             ingestionQueue,
+		Redis:             rdb,
+		Config:            cfg,
+		TraceHandler:      traceHandler,
+		PromptHandler:     promptHandler,
+		EvaluationHandler: evalHandler,
+		DatasetHandler:    datasetHandler,
+		EvaluatorHandler:  evaluatorHandler,
+		EvaluationService: evalService,
+		PromptService:     promptService,
+		DatasetService:    datasetService,
+		CostService:       costService,
+	})
 	apiRouter.RegisterRoutes(r)
 
 	// Start server
@@ -131,7 +162,8 @@ func main() {
 
 	log.Println("Shutting down server...")
 
-	// Stop the worker
+	// Stop the worker and let it drain the item it is holding.
+	stopWorker()
 	ingestionWorker.Stop()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

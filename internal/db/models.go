@@ -5,15 +5,36 @@
 package db
 
 import (
+	"encoding/json"
+
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type ApiKey struct {
-	ID        string             `db:"id" json:"id"`
-	ProjectID string             `db:"project_id" json:"project_id"`
-	Key       string             `db:"key" json:"key"`
-	Name      pgtype.Text        `db:"name" json:"name"`
-	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	ID               string             `db:"id" json:"id"`
+	ProjectID        string             `db:"project_id" json:"project_id"`
+	Key              string             `db:"key" json:"key"`
+	Name             pgtype.Text        `db:"name" json:"name"`
+	CreatedAt        pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	PublicKey        pgtype.Text        `db:"public_key" json:"public_key"`
+	SecretKeyHash    pgtype.Text        `db:"secret_key_hash" json:"secret_key_hash"`
+	DisplaySecretKey pgtype.Text        `db:"display_secret_key" json:"display_secret_key"`
+	LastUsedAt       pgtype.Timestamptz `db:"last_used_at" json:"last_used_at"`
+	ExpiresAt        pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
+}
+
+type AuditLog struct {
+	ID         string             `db:"id" json:"id"`
+	OrgID      pgtype.Text        `db:"org_id" json:"org_id"`
+	ProjectID  pgtype.Text        `db:"project_id" json:"project_id"`
+	UserID     pgtype.Text        `db:"user_id" json:"user_id"`
+	ApiKeyID   pgtype.Text        `db:"api_key_id" json:"api_key_id"`
+	Action     string             `db:"action" json:"action"`
+	Resource   string             `db:"resource" json:"resource"`
+	ResourceID pgtype.Text        `db:"resource_id" json:"resource_id"`
+	IpAddress  pgtype.Text        `db:"ip_address" json:"ip_address"`
+	Detail     json.RawMessage    `db:"detail" json:"detail"`
+	CreatedAt  pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
 type Dataset struct {
@@ -25,20 +46,24 @@ type Dataset struct {
 }
 
 type DatasetItem struct {
-	ID             string             `db:"id" json:"id"`
-	DatasetID      string             `db:"dataset_id" json:"dataset_id"`
-	Input          []byte             `db:"input" json:"input"`
-	ExpectedOutput []byte             `db:"expected_output" json:"expected_output"`
-	Metadata       []byte             `db:"metadata" json:"metadata"`
-	SourceTraceID  pgtype.Text        `db:"source_trace_id" json:"source_trace_id"`
-	CreatedAt      pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	ID                  string             `db:"id" json:"id"`
+	DatasetID           string             `db:"dataset_id" json:"dataset_id"`
+	Input               json.RawMessage    `db:"input" json:"input"`
+	ExpectedOutput      json.RawMessage    `db:"expected_output" json:"expected_output"`
+	Metadata            json.RawMessage    `db:"metadata" json:"metadata"`
+	SourceTraceID       pgtype.Text        `db:"source_trace_id" json:"source_trace_id"`
+	CreatedAt           pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	Status              string             `db:"status" json:"status"`
+	SourceObservationID pgtype.Text        `db:"source_observation_id" json:"source_observation_id"`
 }
 
 type DatasetRun struct {
-	ID        string             `db:"id" json:"id"`
-	DatasetID string             `db:"dataset_id" json:"dataset_id"`
-	Name      string             `db:"name" json:"name"`
-	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	ID          string             `db:"id" json:"id"`
+	DatasetID   string             `db:"dataset_id" json:"dataset_id"`
+	Name        string             `db:"name" json:"name"`
+	CreatedAt   pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	Description pgtype.Text        `db:"description" json:"description"`
+	Metadata    json.RawMessage    `db:"metadata" json:"metadata"`
 }
 
 type DatasetRunItem struct {
@@ -48,6 +73,7 @@ type DatasetRunItem struct {
 	ObservationID pgtype.Text        `db:"observation_id" json:"observation_id"`
 	ScoreID       pgtype.Text        `db:"score_id" json:"score_id"`
 	CreatedAt     pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	TraceID       pgtype.Text        `db:"trace_id" json:"trace_id"`
 }
 
 type EvaluationRun struct {
@@ -56,7 +82,7 @@ type EvaluationRun struct {
 	EvaluatorConfigID string             `db:"evaluator_config_id" json:"evaluator_config_id"`
 	Name              string             `db:"name" json:"name"`
 	Status            string             `db:"status" json:"status"`
-	ResultSummary     []byte             `db:"result_summary" json:"result_summary"`
+	ResultSummary     json.RawMessage    `db:"result_summary" json:"result_summary"`
 	CreatedAt         pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
@@ -66,7 +92,7 @@ type EvaluatorConfig struct {
 	Name        string             `db:"name" json:"name"`
 	Description pgtype.Text        `db:"description" json:"description"`
 	Type        string             `db:"type" json:"type"`
-	Config      []byte             `db:"config" json:"config"`
+	Config      json.RawMessage    `db:"config" json:"config"`
 	IsActive    bool               `db:"is_active" json:"is_active"`
 	CreatedAt   pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
@@ -78,22 +104,47 @@ type Member struct {
 	Role   string `db:"role" json:"role"`
 }
 
+type ModelPrice struct {
+	ID           string             `db:"id" json:"id"`
+	ProjectID    pgtype.Text        `db:"project_id" json:"project_id"`
+	ModelName    string             `db:"model_name" json:"model_name"`
+	MatchPattern string             `db:"match_pattern" json:"match_pattern"`
+	Unit         string             `db:"unit" json:"unit"`
+	InputPrice   pgtype.Float8      `db:"input_price" json:"input_price"`
+	OutputPrice  pgtype.Float8      `db:"output_price" json:"output_price"`
+	TotalPrice   pgtype.Float8      `db:"total_price" json:"total_price"`
+	Currency     string             `db:"currency" json:"currency"`
+	CreatedAt    pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
 type Observation struct {
 	ID                  string             `db:"id" json:"id"`
 	TraceID             string             `db:"trace_id" json:"trace_id"`
 	Type                string             `db:"type" json:"type"`
 	Name                pgtype.Text        `db:"name" json:"name"`
-	Input               []byte             `db:"input" json:"input"`
-	Output              []byte             `db:"output" json:"output"`
-	Metadata            []byte             `db:"metadata" json:"metadata"`
+	Input               json.RawMessage    `db:"input" json:"input"`
+	Output              json.RawMessage    `db:"output" json:"output"`
+	Metadata            json.RawMessage    `db:"metadata" json:"metadata"`
 	Model               pgtype.Text        `db:"model" json:"model"`
-	ModelParameters     []byte             `db:"model_parameters" json:"model_parameters"`
+	ModelParameters     json.RawMessage    `db:"model_parameters" json:"model_parameters"`
 	StartTime           pgtype.Timestamptz `db:"start_time" json:"start_time"`
 	EndTime             pgtype.Timestamptz `db:"end_time" json:"end_time"`
-	TokenUsage          []byte             `db:"token_usage" json:"token_usage"`
+	TokenUsage          json.RawMessage    `db:"token_usage" json:"token_usage"`
 	Cost                pgtype.Float8      `db:"cost" json:"cost"`
 	Status              string             `db:"status" json:"status"`
 	ParentObservationID pgtype.Text        `db:"parent_observation_id" json:"parent_observation_id"`
+	ProjectID           string             `db:"project_id" json:"project_id"`
+	Level               string             `db:"level" json:"level"`
+	StatusMessage       pgtype.Text        `db:"status_message" json:"status_message"`
+	CompletionStartTime pgtype.Timestamptz `db:"completion_start_time" json:"completion_start_time"`
+	PromptID            pgtype.Text        `db:"prompt_id" json:"prompt_id"`
+	PromptName          pgtype.Text        `db:"prompt_name" json:"prompt_name"`
+	PromptVersion       pgtype.Int4        `db:"prompt_version" json:"prompt_version"`
+	UsageDetails        json.RawMessage    `db:"usage_details" json:"usage_details"`
+	CostDetails         json.RawMessage    `db:"cost_details" json:"cost_details"`
+	Version             pgtype.Text        `db:"version" json:"version"`
+	Environment         string             `db:"environment" json:"environment"`
+	CreatedAt           pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
 type Organization struct {
@@ -110,42 +161,71 @@ type Project struct {
 }
 
 type Prompt struct {
-	ID        string             `db:"id" json:"id"`
-	ProjectID string             `db:"project_id" json:"project_id"`
-	Name      string             `db:"name" json:"name"`
-	Version   int32              `db:"version" json:"version"`
-	Prompt    []byte             `db:"prompt" json:"prompt"`
-	Config    []byte             `db:"config" json:"config"`
-	IsActive  bool               `db:"is_active" json:"is_active"`
-	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	ID            string             `db:"id" json:"id"`
+	ProjectID     string             `db:"project_id" json:"project_id"`
+	Name          string             `db:"name" json:"name"`
+	Version       int32              `db:"version" json:"version"`
+	Prompt        json.RawMessage    `db:"prompt" json:"prompt"`
+	Config        json.RawMessage    `db:"config" json:"config"`
+	IsActive      bool               `db:"is_active" json:"is_active"`
+	CreatedAt     pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	Type          string             `db:"type" json:"type"`
+	Labels        []string           `db:"labels" json:"labels"`
+	Tags          []string           `db:"tags" json:"tags"`
+	CommitMessage pgtype.Text        `db:"commit_message" json:"commit_message"`
+	CreatedBy     pgtype.Text        `db:"created_by" json:"created_by"`
 }
 
 type Score struct {
-	ID        string             `db:"id" json:"id"`
-	TraceID   string             `db:"trace_id" json:"trace_id"`
-	Name      string             `db:"name" json:"name"`
-	Value     pgtype.Float8      `db:"value" json:"value"`
-	Comment   pgtype.Text        `db:"comment" json:"comment"`
-	Source    string             `db:"source" json:"source"`
-	UserID    pgtype.Text        `db:"user_id" json:"user_id"`
-	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	ID            string             `db:"id" json:"id"`
+	TraceID       pgtype.Text        `db:"trace_id" json:"trace_id"`
+	Name          string             `db:"name" json:"name"`
+	Value         pgtype.Float8      `db:"value" json:"value"`
+	Comment       pgtype.Text        `db:"comment" json:"comment"`
+	Source        string             `db:"source" json:"source"`
+	UserID        pgtype.Text        `db:"user_id" json:"user_id"`
+	CreatedAt     pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	ProjectID     string             `db:"project_id" json:"project_id"`
+	ObservationID pgtype.Text        `db:"observation_id" json:"observation_id"`
+	SessionID     pgtype.Text        `db:"session_id" json:"session_id"`
+	DatasetRunID  pgtype.Text        `db:"dataset_run_id" json:"dataset_run_id"`
+	DataType      string             `db:"data_type" json:"data_type"`
+	StringValue   pgtype.Text        `db:"string_value" json:"string_value"`
+	ConfigID      pgtype.Text        `db:"config_id" json:"config_id"`
+	Metadata      json.RawMessage    `db:"metadata" json:"metadata"`
+	Environment   string             `db:"environment" json:"environment"`
+}
+
+type Session struct {
+	ID          string             `db:"id" json:"id"`
+	ProjectID   string             `db:"project_id" json:"project_id"`
+	Bookmarked  bool               `db:"bookmarked" json:"bookmarked"`
+	Public      bool               `db:"public" json:"public"`
+	Environment string             `db:"environment" json:"environment"`
+	CreatedAt   pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
 type Trace struct {
-	ID         string             `db:"id" json:"id"`
-	ProjectID  string             `db:"project_id" json:"project_id"`
-	Name       pgtype.Text        `db:"name" json:"name"`
-	Input      []byte             `db:"input" json:"input"`
-	Output     []byte             `db:"output" json:"output"`
-	Metadata   []byte             `db:"metadata" json:"metadata"`
-	UserID     pgtype.Text        `db:"user_id" json:"user_id"`
-	SessionID  pgtype.Text        `db:"session_id" json:"session_id"`
-	Tags       []string           `db:"tags" json:"tags"`
-	StartTime  pgtype.Timestamptz `db:"start_time" json:"start_time"`
-	EndTime    pgtype.Timestamptz `db:"end_time" json:"end_time"`
-	TotalCost  pgtype.Float8      `db:"total_cost" json:"total_cost"`
-	TokenUsage []byte             `db:"token_usage" json:"token_usage"`
-	CreatedAt  pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	ID          string             `db:"id" json:"id"`
+	ProjectID   string             `db:"project_id" json:"project_id"`
+	Name        pgtype.Text        `db:"name" json:"name"`
+	Input       json.RawMessage    `db:"input" json:"input"`
+	Output      json.RawMessage    `db:"output" json:"output"`
+	Metadata    json.RawMessage    `db:"metadata" json:"metadata"`
+	UserID      pgtype.Text        `db:"user_id" json:"user_id"`
+	SessionID   pgtype.Text        `db:"session_id" json:"session_id"`
+	Tags        []string           `db:"tags" json:"tags"`
+	StartTime   pgtype.Timestamptz `db:"start_time" json:"start_time"`
+	EndTime     pgtype.Timestamptz `db:"end_time" json:"end_time"`
+	TotalCost   pgtype.Float8      `db:"total_cost" json:"total_cost"`
+	TokenUsage  json.RawMessage    `db:"token_usage" json:"token_usage"`
+	CreatedAt   pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	Release     pgtype.Text        `db:"release" json:"release"`
+	Version     pgtype.Text        `db:"version" json:"version"`
+	Public      bool               `db:"public" json:"public"`
+	Bookmarked  bool               `db:"bookmarked" json:"bookmarked"`
+	Environment string             `db:"environment" json:"environment"`
+	UpdatedAt   pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 }
 
 type User struct {

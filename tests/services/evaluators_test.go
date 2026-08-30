@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/langfuse-light/langfuse-light/internal/db"
@@ -210,4 +211,17 @@ func buildTestEvaluator(evalType string, configJSON string) (services.Evaluator,
 
 func pgtypeFloat8(v float64) pgtype.Float8 {
 	return pgtype.Float8{Float64: v, Valid: true}
+}
+
+func pgtypeText(v string) pgtype.Text {
+	return pgtype.Text{String: v, Valid: v != ""}
+}
+
+// timestamptz parses an RFC 3339 literal for use in a test fixture.
+func timestamptz(value string) pgtype.Timestamptz {
+	parsed, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		panic(err)
+	}
+	return pgtype.Timestamptz{Time: parsed, Valid: true}
 }

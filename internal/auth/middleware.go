@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/langfuse-light/langfuse-light/internal/db"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type contextKey string
@@ -78,25 +78,7 @@ func GetAPIKeyID(ctx context.Context) string {
 	return ""
 }
 
-// APIKeyMiddleware validates API keys from x-api-key header and sets project_id in context.
-func APIKeyMiddleware(queries *db.Queries) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			apiKey := r.Header.Get("x-api-key")
-			if apiKey == "" {
-				http.Error(w, `{"error":"missing x-api-key header"}`, http.StatusUnauthorized)
-				return
-			}
-
-			keyRecord, err := queries.GetAPIKeyByKey(r.Context(), apiKey)
-			if err != nil {
-				http.Error(w, `{"error":"invalid API key"}`, http.StatusUnauthorized)
-				return
-			}
-
-			ctx := context.WithValue(r.Context(), ProjectIDKey, keyRecord.ProjectID)
-			ctx = context.WithValue(ctx, APIKeyIDKey, keyRecord.ID)
-			next.ServeHTTP(w, r.WithContext(ctx))
-		})
-	}
+// pgText wraps a string for a nullable text query parameter.
+func pgText(v string) pgtype.Text {
+	return pgtype.Text{String: v, Valid: v != ""}
 }

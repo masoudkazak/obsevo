@@ -1,8 +1,6 @@
 package api
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"net/http"
 
@@ -23,13 +21,24 @@ func NewSettingsHandler(queries *db.Queries) *SettingsHandler {
 	return &SettingsHandler{queries: queries}
 }
 
-// APIKey represents an API key in responses.
+// APIKey represents an API key in responses. The secret key is never included
+// here — it is returned once, by CreateAPIKey, and only its digest is stored.
 type APIKey struct {
-	ID        string `json:"id"`
-	ProjectID string `json:"project_id"`
-	Key       string `json:"key"`
-	Name      string `json:"name"`
-	CreatedAt string `json:"created_at"`
+	ID            string `json:"id"`
+	ProjectID     string `json:"project_id"`
+	Key           string `json:"key"`
+	PublicKey     string `json:"public_key"`
+	DisplaySecret string `json:"display_secret_key"`
+	Name          string `json:"name"`
+	CreatedAt     string `json:"created_at"`
+	LastUsedAt    string `json:"last_used_at,omitempty"`
+}
+
+// CreateAPIKeyResponse is returned once, when a key is created. It is the only
+// time the secret key is disclosed.
+type CreateAPIKeyResponse struct {
+	APIKey
+	SecretKey string `json:"secret_key"`
 }
 
 // CreateAPIKeyRequest is the request body for creating an API key.
@@ -67,7 +76,7 @@ type UserWithProfile struct {
 
 // ListAPIKeys handles GET /api/api-keys.
 func (h *SettingsHandler) ListAPIKeys(w http.ResponseWriter, r *http.Request) {
-	projectID := r.URL.Query().Get("project_id")
+	projectID := auth.GetProjectID(r.Context())
 	if projectID == "" {
 		writeError(w, http.StatusBadRequest, "project_id is required")
 		return
@@ -81,13 +90,7 @@ func (h *SettingsHandler) ListAPIKeys(w http.ResponseWriter, r *http.Request) {
 
 	result := make([]APIKey, len(keys))
 	for i, k := range keys {
-		result[i] = APIKey{
-			ID:        k.ID,
-			ProjectID: k.ProjectID,
-			Key:       k.Key,
-			Name:      k.Name.String,
-			CreatedAt: k.CreatedAt.Time.String(),
-		}
+		result[i] = toAPIKeyResponse(k)
 	}
 
 	writeJSON(w, http.StatusOK, result)
@@ -101,43 +104,64 @@ func (h *SettingsHandler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	projectID := r.URL.Query().Get("project_id")
+	projectID := auth.GetProjectID(r.Context())
 	if projectID == "" {
 		writeError(w, http.StatusBadRequest, "project_id is required")
 		return
 	}
 
-	// Generate a random API key
-	keyBytes := make([]byte, 32)
-	if _, err := rand.Read(keyBytes); err != nil {
+	pair, err := auth.GenerateKeyPair()
+	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to generate API key")
 		return
 	}
-	key := "pk-" + hex.EncodeToString(keyBytes)
 
-	apiKey, err := h.queries.CreateAPIKey(r.Context(), db.CreateAPIKeyParams{
-		ProjectID: projectID,
-		Key:       key,
-		Name:      pgtype.Text{String: req.Name, Valid: req.Name != ""},
+	// The secret key doubles as the value for the original x-api-key header, so
+	// a single credential works with both authentication schemes.
+	apiKey, err := h.queries.CreateAPIKeyPair(r.Context(), db.CreateAPIKeyPairParams{
+		ProjectID:        projectID,
+		Key:              pair.SecretKey,
+		Name:             req.Name,
+		PublicKey:        pair.PublicKey,
+		SecretKeyHash:    pair.SecretKeyHash,
+		DisplaySecretKey: pair.DisplaySecret,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to create API key: "+err.Error())
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, APIKey{
-		ID:        apiKey.ID,
-		ProjectID: apiKey.ProjectID,
-		Key:       apiKey.Key,
-		Name:      apiKey.Name.String,
-		CreatedAt: apiKey.CreatedAt.Time.String(),
+	writeJSON(w, http.StatusCreated, CreateAPIKeyResponse{
+		APIKey:    toAPIKeyResponse(apiKey),
+		SecretKey: pair.SecretKey,
 	})
+}
+
+// toAPIKeyResponse renders a stored key without disclosing its secret.
+func toAPIKeyResponse(k db.ApiKey) APIKey {
+	out := APIKey{
+		ID:            k.ID,
+		ProjectID:     k.ProjectID,
+		PublicKey:     k.PublicKey.String,
+		DisplaySecret: k.DisplaySecretKey.String,
+		Name:          k.Name.String,
+		CreatedAt:     k.CreatedAt.Time.String(),
+	}
+	if k.LastUsedAt.Valid {
+		out.LastUsedAt = k.LastUsedAt.Time.String()
+	}
+	// Keys created before public/secret pairs existed have no public key; their
+	// single value is still shown so they remain usable.
+	if !k.PublicKey.Valid {
+		out.Key = k.Key
+	}
+	return out
 }
 
 // DeleteAPIKey handles DELETE /api/api-keys/{id}.
 func (h *SettingsHandler) DeleteAPIKey(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	projectID := r.URL.Query().Get("project_id")
+	projectID := auth.GetProjectID(r.Context())
 	if projectID == "" {
 		writeError(w, http.StatusBadRequest, "project_id is required")
 		return

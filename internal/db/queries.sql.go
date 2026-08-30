@@ -7,9 +7,34 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const addLabelToPromptVersion = `-- name: AddLabelToPromptVersion :exec
+UPDATE prompts
+SET labels = array_append(labels, $3::TEXT)
+WHERE project_id = $1 AND name = $2 AND version = $4::INT
+  AND NOT (labels @> ARRAY[$3::TEXT])
+`
+
+type AddLabelToPromptVersionParams struct {
+	ProjectID string `db:"project_id" json:"project_id"`
+	Name      string `db:"name" json:"name"`
+	Label     string `db:"label" json:"label"`
+	Version   int32  `db:"version" json:"version"`
+}
+
+func (q *Queries) AddLabelToPromptVersion(ctx context.Context, arg AddLabelToPromptVersionParams) error {
+	_, err := q.db.Exec(ctx, addLabelToPromptVersion,
+		arg.ProjectID,
+		arg.Name,
+		arg.Label,
+		arg.Version,
+	)
+	return err
+}
 
 const countDatasetItemsByDatasetID = `-- name: CountDatasetItemsByDatasetID :one
 SELECT COUNT(*) FROM dataset_items WHERE dataset_id = $1
@@ -17,6 +42,70 @@ SELECT COUNT(*) FROM dataset_items WHERE dataset_id = $1
 
 func (q *Queries) CountDatasetItemsByDatasetID(ctx context.Context, datasetID string) (int64, error) {
 	row := q.db.QueryRow(ctx, countDatasetItemsByDatasetID, datasetID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countObservationsFiltered = `-- name: CountObservationsFiltered :one
+SELECT COUNT(*) FROM observations
+WHERE project_id = $1::TEXT
+  AND (NULLIF($2::TEXT, '') IS NULL OR trace_id = $2::TEXT)
+  AND (NULLIF($3::TEXT, '')     IS NULL OR type     = $3::TEXT)
+  AND (NULLIF($4::TEXT, '')     IS NULL OR name     = $4::TEXT)
+  AND (NULLIF($5::TEXT, '')    IS NULL OR model    = $5::TEXT)
+  AND (NULLIF($6::TEXT, '')    IS NULL OR level    = $6::TEXT)
+`
+
+type CountObservationsFilteredParams struct {
+	ProjectID string `db:"project_id" json:"project_id"`
+	TraceID   string `db:"trace_id" json:"trace_id"`
+	Type      string `db:"type" json:"type"`
+	Name      string `db:"name" json:"name"`
+	Model     string `db:"model" json:"model"`
+	Level     string `db:"level" json:"level"`
+}
+
+func (q *Queries) CountObservationsFiltered(ctx context.Context, arg CountObservationsFilteredParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countObservationsFiltered,
+		arg.ProjectID,
+		arg.TraceID,
+		arg.Type,
+		arg.Name,
+		arg.Model,
+		arg.Level,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countScores = `-- name: CountScores :one
+SELECT COUNT(*) FROM scores
+WHERE project_id = $1::TEXT
+  AND (NULLIF($2::TEXT, '')   IS NULL OR name   = $2::TEXT)
+  AND (NULLIF($3::TEXT, '') IS NULL OR source = $3::TEXT)
+`
+
+type CountScoresParams struct {
+	ProjectID string `db:"project_id" json:"project_id"`
+	Name      string `db:"name" json:"name"`
+	Source    string `db:"source" json:"source"`
+}
+
+func (q *Queries) CountScores(ctx context.Context, arg CountScoresParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countScores, arg.ProjectID, arg.Name, arg.Source)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countSessions = `-- name: CountSessions :one
+SELECT COUNT(*) FROM sessions WHERE project_id = $1
+`
+
+func (q *Queries) CountSessions(ctx context.Context, projectID string) (int64, error) {
+	row := q.db.QueryRow(ctx, countSessions, projectID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -33,10 +122,55 @@ func (q *Queries) CountTracesByProjectID(ctx context.Context, projectID string) 
 	return count, err
 }
 
+const countTracesFiltered = `-- name: CountTracesFiltered :one
+SELECT COUNT(*) FROM traces
+WHERE project_id = $1::TEXT
+  AND (NULLIF($2::TEXT, '')        IS NULL OR name        = $2::TEXT)
+  AND (NULLIF($3::TEXT, '')     IS NULL OR user_id     = $3::TEXT)
+  AND (NULLIF($4::TEXT, '')  IS NULL OR session_id  = $4::TEXT)
+  AND (NULLIF($5::TEXT, '')     IS NULL OR release     = $5::TEXT)
+  AND (NULLIF($6::TEXT, '')     IS NULL OR version     = $6::TEXT)
+  AND (NULLIF($7::TEXT, '') IS NULL OR environment = $7::TEXT)
+  AND (cardinality($8::TEXT[]) = 0 OR tags @> $8::TEXT[])
+  AND ($9::TIMESTAMPTZ IS NULL OR start_time >= $9::TIMESTAMPTZ)
+  AND ($10::TIMESTAMPTZ   IS NULL OR start_time <  $10::TIMESTAMPTZ)
+`
+
+type CountTracesFilteredParams struct {
+	ProjectID   string             `db:"project_id" json:"project_id"`
+	Name        string             `db:"name" json:"name"`
+	UserID      string             `db:"user_id" json:"user_id"`
+	SessionID   string             `db:"session_id" json:"session_id"`
+	Release     string             `db:"release" json:"release"`
+	Version     string             `db:"version" json:"version"`
+	Environment string             `db:"environment" json:"environment"`
+	Tags        []string           `db:"tags" json:"tags"`
+	FromTime    pgtype.Timestamptz `db:"from_time" json:"from_time"`
+	ToTime      pgtype.Timestamptz `db:"to_time" json:"to_time"`
+}
+
+func (q *Queries) CountTracesFiltered(ctx context.Context, arg CountTracesFilteredParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countTracesFiltered,
+		arg.ProjectID,
+		arg.Name,
+		arg.UserID,
+		arg.SessionID,
+		arg.Release,
+		arg.Version,
+		arg.Environment,
+		arg.Tags,
+		arg.FromTime,
+		arg.ToTime,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createAPIKey = `-- name: CreateAPIKey :one
 INSERT INTO api_keys (project_id, key, name)
 VALUES ($1, $2, $3)
-RETURNING id, project_id, key, name, created_at
+RETURNING id, project_id, key, name, created_at, public_key, secret_key_hash, display_secret_key, last_used_at, expires_at
 `
 
 type CreateAPIKeyParams struct {
@@ -54,8 +188,100 @@ func (q *Queries) CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (Api
 		&i.Key,
 		&i.Name,
 		&i.CreatedAt,
+		&i.PublicKey,
+		&i.SecretKeyHash,
+		&i.DisplaySecretKey,
+		&i.LastUsedAt,
+		&i.ExpiresAt,
 	)
 	return i, err
+}
+
+const createAPIKeyPair = `-- name: CreateAPIKeyPair :one
+
+INSERT INTO api_keys (project_id, key, name, public_key, secret_key_hash, display_secret_key)
+VALUES (
+  $1::TEXT, $2::TEXT, NULLIF($3::TEXT, ''),
+  $4::TEXT, $5::TEXT, $6::TEXT
+)
+RETURNING id, project_id, key, name, created_at, public_key, secret_key_hash, display_secret_key, last_used_at, expires_at
+`
+
+type CreateAPIKeyPairParams struct {
+	ProjectID        string `db:"project_id" json:"project_id"`
+	Key              string `db:"key" json:"key"`
+	Name             string `db:"name" json:"name"`
+	PublicKey        string `db:"public_key" json:"public_key"`
+	SecretKeyHash    string `db:"secret_key_hash" json:"secret_key_hash"`
+	DisplaySecretKey string `db:"display_secret_key" json:"display_secret_key"`
+}
+
+// ===========================================================================
+// API keys (Langfuse-style public/secret pairs)
+// ===========================================================================
+func (q *Queries) CreateAPIKeyPair(ctx context.Context, arg CreateAPIKeyPairParams) (ApiKey, error) {
+	row := q.db.QueryRow(ctx, createAPIKeyPair,
+		arg.ProjectID,
+		arg.Key,
+		arg.Name,
+		arg.PublicKey,
+		arg.SecretKeyHash,
+		arg.DisplaySecretKey,
+	)
+	var i ApiKey
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Key,
+		&i.Name,
+		&i.CreatedAt,
+		&i.PublicKey,
+		&i.SecretKeyHash,
+		&i.DisplaySecretKey,
+		&i.LastUsedAt,
+		&i.ExpiresAt,
+	)
+	return i, err
+}
+
+const createAuditLog = `-- name: CreateAuditLog :exec
+
+INSERT INTO audit_logs (org_id, project_id, user_id, api_key_id, action, resource, resource_id, ip_address, detail)
+VALUES (
+  NULLIF($1::TEXT, ''), NULLIF($2::TEXT, ''), NULLIF($3::TEXT, ''),
+  NULLIF($4::TEXT, ''), $5::TEXT, $6::TEXT,
+  NULLIF($7::TEXT, ''), NULLIF($8::TEXT, ''), $9
+)
+`
+
+type CreateAuditLogParams struct {
+	OrgID      string          `db:"org_id" json:"org_id"`
+	ProjectID  string          `db:"project_id" json:"project_id"`
+	UserID     string          `db:"user_id" json:"user_id"`
+	ApiKeyID   string          `db:"api_key_id" json:"api_key_id"`
+	Action     string          `db:"action" json:"action"`
+	Resource   string          `db:"resource" json:"resource"`
+	ResourceID string          `db:"resource_id" json:"resource_id"`
+	IpAddress  string          `db:"ip_address" json:"ip_address"`
+	Detail     json.RawMessage `db:"detail" json:"detail"`
+}
+
+// ===========================================================================
+// Audit log
+// ===========================================================================
+func (q *Queries) CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) error {
+	_, err := q.db.Exec(ctx, createAuditLog,
+		arg.OrgID,
+		arg.ProjectID,
+		arg.UserID,
+		arg.ApiKeyID,
+		arg.Action,
+		arg.Resource,
+		arg.ResourceID,
+		arg.IpAddress,
+		arg.Detail,
+	)
+	return err
 }
 
 const createDataset = `-- name: CreateDataset :one
@@ -86,15 +312,15 @@ func (q *Queries) CreateDataset(ctx context.Context, arg CreateDatasetParams) (D
 const createDatasetItem = `-- name: CreateDatasetItem :one
 INSERT INTO dataset_items (dataset_id, input, expected_output, metadata, source_trace_id)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, dataset_id, input, expected_output, metadata, source_trace_id, created_at
+RETURNING id, dataset_id, input, expected_output, metadata, source_trace_id, created_at, status, source_observation_id
 `
 
 type CreateDatasetItemParams struct {
-	DatasetID      string      `db:"dataset_id" json:"dataset_id"`
-	Input          []byte      `db:"input" json:"input"`
-	ExpectedOutput []byte      `db:"expected_output" json:"expected_output"`
-	Metadata       []byte      `db:"metadata" json:"metadata"`
-	SourceTraceID  pgtype.Text `db:"source_trace_id" json:"source_trace_id"`
+	DatasetID      string          `db:"dataset_id" json:"dataset_id"`
+	Input          json.RawMessage `db:"input" json:"input"`
+	ExpectedOutput json.RawMessage `db:"expected_output" json:"expected_output"`
+	Metadata       json.RawMessage `db:"metadata" json:"metadata"`
+	SourceTraceID  pgtype.Text     `db:"source_trace_id" json:"source_trace_id"`
 }
 
 func (q *Queries) CreateDatasetItem(ctx context.Context, arg CreateDatasetItemParams) (DatasetItem, error) {
@@ -114,6 +340,64 @@ func (q *Queries) CreateDatasetItem(ctx context.Context, arg CreateDatasetItemPa
 		&i.Metadata,
 		&i.SourceTraceID,
 		&i.CreatedAt,
+		&i.Status,
+		&i.SourceObservationID,
+	)
+	return i, err
+}
+
+const createDatasetItemFull = `-- name: CreateDatasetItemFull :one
+INSERT INTO dataset_items (id, dataset_id, input, expected_output, metadata, source_trace_id, source_observation_id, status)
+VALUES (
+  COALESCE(NULLIF($1::TEXT, ''), gen_random_uuid()::TEXT),
+  $2::TEXT, $3, $4, $5,
+  NULLIF($6::TEXT, ''), NULLIF($7::TEXT, ''),
+  $8::TEXT
+)
+ON CONFLICT (id) DO UPDATE SET
+  input           = EXCLUDED.input,
+  expected_output = EXCLUDED.expected_output,
+  metadata        = EXCLUDED.metadata,
+  status          = EXCLUDED.status
+WHERE dataset_items.dataset_id = EXCLUDED.dataset_id
+RETURNING id, dataset_id, input, expected_output, metadata, source_trace_id, created_at, status, source_observation_id
+`
+
+type CreateDatasetItemFullParams struct {
+	ID                  string          `db:"id" json:"id"`
+	DatasetID           string          `db:"dataset_id" json:"dataset_id"`
+	Input               json.RawMessage `db:"input" json:"input"`
+	ExpectedOutput      json.RawMessage `db:"expected_output" json:"expected_output"`
+	Metadata            json.RawMessage `db:"metadata" json:"metadata"`
+	SourceTraceID       string          `db:"source_trace_id" json:"source_trace_id"`
+	SourceObservationID string          `db:"source_observation_id" json:"source_observation_id"`
+	Status              string          `db:"status" json:"status"`
+}
+
+// Without this guard, supplying an id that already exists in a different
+// dataset would silently rewrite that other dataset's item.
+func (q *Queries) CreateDatasetItemFull(ctx context.Context, arg CreateDatasetItemFullParams) (DatasetItem, error) {
+	row := q.db.QueryRow(ctx, createDatasetItemFull,
+		arg.ID,
+		arg.DatasetID,
+		arg.Input,
+		arg.ExpectedOutput,
+		arg.Metadata,
+		arg.SourceTraceID,
+		arg.SourceObservationID,
+		arg.Status,
+	)
+	var i DatasetItem
+	err := row.Scan(
+		&i.ID,
+		&i.DatasetID,
+		&i.Input,
+		&i.ExpectedOutput,
+		&i.Metadata,
+		&i.SourceTraceID,
+		&i.CreatedAt,
+		&i.Status,
+		&i.SourceObservationID,
 	)
 	return i, err
 }
@@ -121,7 +405,7 @@ func (q *Queries) CreateDatasetItem(ctx context.Context, arg CreateDatasetItemPa
 const createDatasetRun = `-- name: CreateDatasetRun :one
 INSERT INTO dataset_runs (dataset_id, name)
 VALUES ($1, $2)
-RETURNING id, dataset_id, name, created_at
+RETURNING id, dataset_id, name, created_at, description, metadata
 `
 
 type CreateDatasetRunParams struct {
@@ -137,6 +421,40 @@ func (q *Queries) CreateDatasetRun(ctx context.Context, arg CreateDatasetRunPara
 		&i.DatasetID,
 		&i.Name,
 		&i.CreatedAt,
+		&i.Description,
+		&i.Metadata,
+	)
+	return i, err
+}
+
+const createDatasetRunFull = `-- name: CreateDatasetRunFull :one
+INSERT INTO dataset_runs (dataset_id, name, description, metadata)
+VALUES ($1::TEXT, $2::TEXT, NULLIF($3::TEXT, ''), $4)
+RETURNING id, dataset_id, name, created_at, description, metadata
+`
+
+type CreateDatasetRunFullParams struct {
+	DatasetID   string          `db:"dataset_id" json:"dataset_id"`
+	Name        string          `db:"name" json:"name"`
+	Description string          `db:"description" json:"description"`
+	Metadata    json.RawMessage `db:"metadata" json:"metadata"`
+}
+
+func (q *Queries) CreateDatasetRunFull(ctx context.Context, arg CreateDatasetRunFullParams) (DatasetRun, error) {
+	row := q.db.QueryRow(ctx, createDatasetRunFull,
+		arg.DatasetID,
+		arg.Name,
+		arg.Description,
+		arg.Metadata,
+	)
+	var i DatasetRun
+	err := row.Scan(
+		&i.ID,
+		&i.DatasetID,
+		&i.Name,
+		&i.CreatedAt,
+		&i.Description,
+		&i.Metadata,
 	)
 	return i, err
 }
@@ -144,7 +462,7 @@ func (q *Queries) CreateDatasetRun(ctx context.Context, arg CreateDatasetRunPara
 const createDatasetRunItem = `-- name: CreateDatasetRunItem :one
 INSERT INTO dataset_run_items (dataset_run_id, dataset_item_id, observation_id, score_id)
 VALUES ($1, $2, $3, $4)
-RETURNING id, dataset_run_id, dataset_item_id, observation_id, score_id, created_at
+RETURNING id, dataset_run_id, dataset_item_id, observation_id, score_id, created_at, trace_id
 `
 
 type CreateDatasetRunItemParams struct {
@@ -169,6 +487,45 @@ func (q *Queries) CreateDatasetRunItem(ctx context.Context, arg CreateDatasetRun
 		&i.ObservationID,
 		&i.ScoreID,
 		&i.CreatedAt,
+		&i.TraceID,
+	)
+	return i, err
+}
+
+const createDatasetRunItemFull = `-- name: CreateDatasetRunItemFull :one
+INSERT INTO dataset_run_items (dataset_run_id, dataset_item_id, trace_id, observation_id, score_id)
+VALUES (
+  $1::TEXT, $2::TEXT,
+  NULLIF($3::TEXT, ''), NULLIF($4::TEXT, ''), NULLIF($5::TEXT, '')
+)
+RETURNING id, dataset_run_id, dataset_item_id, observation_id, score_id, created_at, trace_id
+`
+
+type CreateDatasetRunItemFullParams struct {
+	DatasetRunID  string `db:"dataset_run_id" json:"dataset_run_id"`
+	DatasetItemID string `db:"dataset_item_id" json:"dataset_item_id"`
+	TraceID       string `db:"trace_id" json:"trace_id"`
+	ObservationID string `db:"observation_id" json:"observation_id"`
+	ScoreID       string `db:"score_id" json:"score_id"`
+}
+
+func (q *Queries) CreateDatasetRunItemFull(ctx context.Context, arg CreateDatasetRunItemFullParams) (DatasetRunItem, error) {
+	row := q.db.QueryRow(ctx, createDatasetRunItemFull,
+		arg.DatasetRunID,
+		arg.DatasetItemID,
+		arg.TraceID,
+		arg.ObservationID,
+		arg.ScoreID,
+	)
+	var i DatasetRunItem
+	err := row.Scan(
+		&i.ID,
+		&i.DatasetRunID,
+		&i.DatasetItemID,
+		&i.ObservationID,
+		&i.ScoreID,
+		&i.CreatedAt,
+		&i.TraceID,
 	)
 	return i, err
 }
@@ -180,11 +537,11 @@ RETURNING id, project_id, evaluator_config_id, name, status, result_summary, cre
 `
 
 type CreateEvaluationRunParams struct {
-	ProjectID         string `db:"project_id" json:"project_id"`
-	EvaluatorConfigID string `db:"evaluator_config_id" json:"evaluator_config_id"`
-	Name              string `db:"name" json:"name"`
-	Status            string `db:"status" json:"status"`
-	ResultSummary     []byte `db:"result_summary" json:"result_summary"`
+	ProjectID         string          `db:"project_id" json:"project_id"`
+	EvaluatorConfigID string          `db:"evaluator_config_id" json:"evaluator_config_id"`
+	Name              string          `db:"name" json:"name"`
+	Status            string          `db:"status" json:"status"`
+	ResultSummary     json.RawMessage `db:"result_summary" json:"result_summary"`
 }
 
 func (q *Queries) CreateEvaluationRun(ctx context.Context, arg CreateEvaluationRunParams) (EvaluationRun, error) {
@@ -215,12 +572,12 @@ RETURNING id, project_id, name, description, type, config, is_active, created_at
 `
 
 type CreateEvaluatorConfigParams struct {
-	ProjectID   string      `db:"project_id" json:"project_id"`
-	Name        string      `db:"name" json:"name"`
-	Description pgtype.Text `db:"description" json:"description"`
-	Type        string      `db:"type" json:"type"`
-	Config      []byte      `db:"config" json:"config"`
-	IsActive    bool        `db:"is_active" json:"is_active"`
+	ProjectID   string          `db:"project_id" json:"project_id"`
+	Name        string          `db:"name" json:"name"`
+	Description pgtype.Text     `db:"description" json:"description"`
+	Type        string          `db:"type" json:"type"`
+	Config      json.RawMessage `db:"config" json:"config"`
+	IsActive    bool            `db:"is_active" json:"is_active"`
 }
 
 func (q *Queries) CreateEvaluatorConfig(ctx context.Context, arg CreateEvaluatorConfigParams) (EvaluatorConfig, error) {
@@ -270,24 +627,76 @@ func (q *Queries) CreateMember(ctx context.Context, arg CreateMemberParams) (Mem
 	return i, err
 }
 
+const createModelPrice = `-- name: CreateModelPrice :one
+INSERT INTO model_prices (
+  project_id, model_name, match_pattern, unit, input_price, output_price, total_price, currency
+)
+VALUES (
+  NULLIF($1::TEXT, ''), $2::TEXT, $3::TEXT, $4::TEXT,
+  $5::DOUBLE PRECISION,
+  $6::DOUBLE PRECISION,
+  $7::DOUBLE PRECISION,
+  $8::TEXT
+)
+RETURNING id, project_id, model_name, match_pattern, unit, input_price, output_price, total_price, currency, created_at
+`
+
+type CreateModelPriceParams struct {
+	ProjectID    string        `db:"project_id" json:"project_id"`
+	ModelName    string        `db:"model_name" json:"model_name"`
+	MatchPattern string        `db:"match_pattern" json:"match_pattern"`
+	Unit         string        `db:"unit" json:"unit"`
+	InputPrice   pgtype.Float8 `db:"input_price" json:"input_price"`
+	OutputPrice  pgtype.Float8 `db:"output_price" json:"output_price"`
+	TotalPrice   pgtype.Float8 `db:"total_price" json:"total_price"`
+	Currency     string        `db:"currency" json:"currency"`
+}
+
+func (q *Queries) CreateModelPrice(ctx context.Context, arg CreateModelPriceParams) (ModelPrice, error) {
+	row := q.db.QueryRow(ctx, createModelPrice,
+		arg.ProjectID,
+		arg.ModelName,
+		arg.MatchPattern,
+		arg.Unit,
+		arg.InputPrice,
+		arg.OutputPrice,
+		arg.TotalPrice,
+		arg.Currency,
+	)
+	var i ModelPrice
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.ModelName,
+		&i.MatchPattern,
+		&i.Unit,
+		&i.InputPrice,
+		&i.OutputPrice,
+		&i.TotalPrice,
+		&i.Currency,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const createObservation = `-- name: CreateObservation :one
 INSERT INTO observations (trace_id, type, name, input, output, metadata, model, model_parameters, start_time, end_time, token_usage, cost, status, parent_observation_id)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-RETURNING id, trace_id, type, name, input, output, metadata, model, model_parameters, start_time, end_time, token_usage, cost, status, parent_observation_id
+RETURNING id, trace_id, type, name, input, output, metadata, model, model_parameters, start_time, end_time, token_usage, cost, status, parent_observation_id, project_id, level, status_message, completion_start_time, prompt_id, prompt_name, prompt_version, usage_details, cost_details, version, environment, created_at
 `
 
 type CreateObservationParams struct {
 	TraceID             string             `db:"trace_id" json:"trace_id"`
 	Type                string             `db:"type" json:"type"`
 	Name                pgtype.Text        `db:"name" json:"name"`
-	Input               []byte             `db:"input" json:"input"`
-	Output              []byte             `db:"output" json:"output"`
-	Metadata            []byte             `db:"metadata" json:"metadata"`
+	Input               json.RawMessage    `db:"input" json:"input"`
+	Output              json.RawMessage    `db:"output" json:"output"`
+	Metadata            json.RawMessage    `db:"metadata" json:"metadata"`
 	Model               pgtype.Text        `db:"model" json:"model"`
-	ModelParameters     []byte             `db:"model_parameters" json:"model_parameters"`
+	ModelParameters     json.RawMessage    `db:"model_parameters" json:"model_parameters"`
 	StartTime           pgtype.Timestamptz `db:"start_time" json:"start_time"`
 	EndTime             pgtype.Timestamptz `db:"end_time" json:"end_time"`
-	TokenUsage          []byte             `db:"token_usage" json:"token_usage"`
+	TokenUsage          json.RawMessage    `db:"token_usage" json:"token_usage"`
 	Cost                pgtype.Float8      `db:"cost" json:"cost"`
 	Status              string             `db:"status" json:"status"`
 	ParentObservationID pgtype.Text        `db:"parent_observation_id" json:"parent_observation_id"`
@@ -327,6 +736,18 @@ func (q *Queries) CreateObservation(ctx context.Context, arg CreateObservationPa
 		&i.Cost,
 		&i.Status,
 		&i.ParentObservationID,
+		&i.ProjectID,
+		&i.Level,
+		&i.StatusMessage,
+		&i.CompletionStartTime,
+		&i.PromptID,
+		&i.PromptName,
+		&i.PromptVersion,
+		&i.UsageDetails,
+		&i.CostDetails,
+		&i.Version,
+		&i.Environment,
+		&i.CreatedAt,
 	)
 	return i, err
 }
@@ -370,16 +791,16 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 const createPrompt = `-- name: CreatePrompt :one
 INSERT INTO prompts (project_id, name, version, prompt, config, is_active)
 VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, project_id, name, version, prompt, config, is_active, created_at
+RETURNING id, project_id, name, version, prompt, config, is_active, created_at, type, labels, tags, commit_message, created_by
 `
 
 type CreatePromptParams struct {
-	ProjectID string `db:"project_id" json:"project_id"`
-	Name      string `db:"name" json:"name"`
-	Version   int32  `db:"version" json:"version"`
-	Prompt    []byte `db:"prompt" json:"prompt"`
-	Config    []byte `db:"config" json:"config"`
-	IsActive  bool   `db:"is_active" json:"is_active"`
+	ProjectID string          `db:"project_id" json:"project_id"`
+	Name      string          `db:"name" json:"name"`
+	Version   int32           `db:"version" json:"version"`
+	Prompt    json.RawMessage `db:"prompt" json:"prompt"`
+	Config    json.RawMessage `db:"config" json:"config"`
+	IsActive  bool            `db:"is_active" json:"is_active"`
 }
 
 func (q *Queries) CreatePrompt(ctx context.Context, arg CreatePromptParams) (Prompt, error) {
@@ -401,33 +822,141 @@ func (q *Queries) CreatePrompt(ctx context.Context, arg CreatePromptParams) (Pro
 		&i.Config,
 		&i.IsActive,
 		&i.CreatedAt,
+		&i.Type,
+		&i.Labels,
+		&i.Tags,
+		&i.CommitMessage,
+		&i.CreatedBy,
+	)
+	return i, err
+}
+
+const createPromptVersion = `-- name: CreatePromptVersion :one
+
+INSERT INTO prompts (project_id, name, version, prompt, config, is_active, type, labels, tags, commit_message, created_by)
+VALUES (
+  $1::TEXT, $2::TEXT, $3::INT, $4, $5,
+  $6::BOOLEAN, $7::TEXT, $8::TEXT[], $9::TEXT[],
+  NULLIF($10::TEXT, ''), NULLIF($11::TEXT, '')
+)
+RETURNING id, project_id, name, version, prompt, config, is_active, created_at, type, labels, tags, commit_message, created_by
+`
+
+type CreatePromptVersionParams struct {
+	ProjectID     string          `db:"project_id" json:"project_id"`
+	Name          string          `db:"name" json:"name"`
+	Version       int32           `db:"version" json:"version"`
+	Prompt        json.RawMessage `db:"prompt" json:"prompt"`
+	Config        json.RawMessage `db:"config" json:"config"`
+	IsActive      bool            `db:"is_active" json:"is_active"`
+	Type          string          `db:"type" json:"type"`
+	Labels        []string        `db:"labels" json:"labels"`
+	Tags          []string        `db:"tags" json:"tags"`
+	CommitMessage string          `db:"commit_message" json:"commit_message"`
+	CreatedBy     string          `db:"created_by" json:"created_by"`
+}
+
+// ===========================================================================
+// Prompts — label-based resolution
+// ===========================================================================
+func (q *Queries) CreatePromptVersion(ctx context.Context, arg CreatePromptVersionParams) (Prompt, error) {
+	row := q.db.QueryRow(ctx, createPromptVersion,
+		arg.ProjectID,
+		arg.Name,
+		arg.Version,
+		arg.Prompt,
+		arg.Config,
+		arg.IsActive,
+		arg.Type,
+		arg.Labels,
+		arg.Tags,
+		arg.CommitMessage,
+		arg.CreatedBy,
+	)
+	var i Prompt
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Version,
+		&i.Prompt,
+		&i.Config,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.Type,
+		&i.Labels,
+		&i.Tags,
+		&i.CommitMessage,
+		&i.CreatedBy,
 	)
 	return i, err
 }
 
 const createScore = `-- name: CreateScore :one
-INSERT INTO scores (trace_id, name, value, comment, source, user_id)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, trace_id, name, value, comment, source, user_id, created_at
+INSERT INTO scores (
+  id, project_id, trace_id, observation_id, session_id, dataset_run_id,
+  name, value, string_value, data_type, comment, source, user_id, config_id, metadata
+)
+VALUES (
+  COALESCE(NULLIF($1::TEXT, ''), gen_random_uuid()::TEXT),
+  $2::TEXT,
+  NULLIF($3::TEXT, ''),
+  NULLIF($4::TEXT, ''),
+  NULLIF($5::TEXT, ''),
+  NULLIF($6::TEXT, ''),
+  $7::TEXT,
+  $8::DOUBLE PRECISION,
+  NULLIF($9::TEXT, ''),
+  $10::TEXT,
+  NULLIF($11::TEXT, ''),
+  $12::TEXT,
+  NULLIF($13::TEXT, ''),
+  NULLIF($14::TEXT, ''),
+  $15
+)
+ON CONFLICT (id) DO UPDATE SET
+  value        = EXCLUDED.value,
+  string_value = EXCLUDED.string_value,
+  comment      = EXCLUDED.comment,
+  metadata     = EXCLUDED.metadata
+RETURNING id, trace_id, name, value, comment, source, user_id, created_at, project_id, observation_id, session_id, dataset_run_id, data_type, string_value, config_id, metadata, environment
 `
 
 type CreateScoreParams struct {
-	TraceID string        `db:"trace_id" json:"trace_id"`
-	Name    string        `db:"name" json:"name"`
-	Value   pgtype.Float8 `db:"value" json:"value"`
-	Comment pgtype.Text   `db:"comment" json:"comment"`
-	Source  string        `db:"source" json:"source"`
-	UserID  pgtype.Text   `db:"user_id" json:"user_id"`
+	ID            string          `db:"id" json:"id"`
+	ProjectID     string          `db:"project_id" json:"project_id"`
+	TraceID       string          `db:"trace_id" json:"trace_id"`
+	ObservationID string          `db:"observation_id" json:"observation_id"`
+	SessionID     string          `db:"session_id" json:"session_id"`
+	DatasetRunID  string          `db:"dataset_run_id" json:"dataset_run_id"`
+	Name          string          `db:"name" json:"name"`
+	Value         pgtype.Float8   `db:"value" json:"value"`
+	StringValue   string          `db:"string_value" json:"string_value"`
+	DataType      string          `db:"data_type" json:"data_type"`
+	Comment       string          `db:"comment" json:"comment"`
+	Source        string          `db:"source" json:"source"`
+	UserID        string          `db:"user_id" json:"user_id"`
+	ConfigID      string          `db:"config_id" json:"config_id"`
+	Metadata      json.RawMessage `db:"metadata" json:"metadata"`
 }
 
 func (q *Queries) CreateScore(ctx context.Context, arg CreateScoreParams) (Score, error) {
 	row := q.db.QueryRow(ctx, createScore,
+		arg.ID,
+		arg.ProjectID,
 		arg.TraceID,
+		arg.ObservationID,
+		arg.SessionID,
+		arg.DatasetRunID,
 		arg.Name,
 		arg.Value,
+		arg.StringValue,
+		arg.DataType,
 		arg.Comment,
 		arg.Source,
 		arg.UserID,
+		arg.ConfigID,
+		arg.Metadata,
 	)
 	var i Score
 	err := row.Scan(
@@ -439,6 +968,15 @@ func (q *Queries) CreateScore(ctx context.Context, arg CreateScoreParams) (Score
 		&i.Source,
 		&i.UserID,
 		&i.CreatedAt,
+		&i.ProjectID,
+		&i.ObservationID,
+		&i.SessionID,
+		&i.DatasetRunID,
+		&i.DataType,
+		&i.StringValue,
+		&i.ConfigID,
+		&i.Metadata,
+		&i.Environment,
 	)
 	return i, err
 }
@@ -446,23 +984,23 @@ func (q *Queries) CreateScore(ctx context.Context, arg CreateScoreParams) (Score
 const createTrace = `-- name: CreateTrace :one
 INSERT INTO traces (id, project_id, name, input, output, metadata, user_id, session_id, tags, start_time, end_time, total_cost, token_usage)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-RETURNING id, project_id, name, input, output, metadata, user_id, session_id, tags, start_time, end_time, total_cost, token_usage, created_at
+RETURNING id, project_id, name, input, output, metadata, user_id, session_id, tags, start_time, end_time, total_cost, token_usage, created_at, release, version, public, bookmarked, environment, updated_at
 `
 
 type CreateTraceParams struct {
 	ID         string             `db:"id" json:"id"`
 	ProjectID  string             `db:"project_id" json:"project_id"`
 	Name       pgtype.Text        `db:"name" json:"name"`
-	Input      []byte             `db:"input" json:"input"`
-	Output     []byte             `db:"output" json:"output"`
-	Metadata   []byte             `db:"metadata" json:"metadata"`
+	Input      json.RawMessage    `db:"input" json:"input"`
+	Output     json.RawMessage    `db:"output" json:"output"`
+	Metadata   json.RawMessage    `db:"metadata" json:"metadata"`
 	UserID     pgtype.Text        `db:"user_id" json:"user_id"`
 	SessionID  pgtype.Text        `db:"session_id" json:"session_id"`
 	Tags       []string           `db:"tags" json:"tags"`
 	StartTime  pgtype.Timestamptz `db:"start_time" json:"start_time"`
 	EndTime    pgtype.Timestamptz `db:"end_time" json:"end_time"`
 	TotalCost  pgtype.Float8      `db:"total_cost" json:"total_cost"`
-	TokenUsage []byte             `db:"token_usage" json:"token_usage"`
+	TokenUsage json.RawMessage    `db:"token_usage" json:"token_usage"`
 }
 
 func (q *Queries) CreateTrace(ctx context.Context, arg CreateTraceParams) (Trace, error) {
@@ -497,6 +1035,12 @@ func (q *Queries) CreateTrace(ctx context.Context, arg CreateTraceParams) (Trace
 		&i.TotalCost,
 		&i.TokenUsage,
 		&i.CreatedAt,
+		&i.Release,
+		&i.Version,
+		&i.Public,
+		&i.Bookmarked,
+		&i.Environment,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -549,12 +1093,59 @@ func (q *Queries) DeleteDataset(ctx context.Context, id string) error {
 	return err
 }
 
-const deleteEvaluatorConfig = `-- name: DeleteEvaluatorConfig :exec
-DELETE FROM evaluator_configs WHERE id = $1
+const deleteDatasetInProject = `-- name: DeleteDatasetInProject :exec
+DELETE FROM datasets WHERE id = $1 AND project_id = $2
 `
 
-func (q *Queries) DeleteEvaluatorConfig(ctx context.Context, id string) error {
-	_, err := q.db.Exec(ctx, deleteEvaluatorConfig, id)
+type DeleteDatasetInProjectParams struct {
+	ID        string `db:"id" json:"id"`
+	ProjectID string `db:"project_id" json:"project_id"`
+}
+
+func (q *Queries) DeleteDatasetInProject(ctx context.Context, arg DeleteDatasetInProjectParams) error {
+	_, err := q.db.Exec(ctx, deleteDatasetInProject, arg.ID, arg.ProjectID)
+	return err
+}
+
+const deleteDatasetItem = `-- name: DeleteDatasetItem :exec
+DELETE FROM dataset_items WHERE id = $1 AND dataset_id = $2
+`
+
+type DeleteDatasetItemParams struct {
+	ID        string `db:"id" json:"id"`
+	DatasetID string `db:"dataset_id" json:"dataset_id"`
+}
+
+func (q *Queries) DeleteDatasetItem(ctx context.Context, arg DeleteDatasetItemParams) error {
+	_, err := q.db.Exec(ctx, deleteDatasetItem, arg.ID, arg.DatasetID)
+	return err
+}
+
+const deleteDatasetRun = `-- name: DeleteDatasetRun :exec
+DELETE FROM dataset_runs WHERE id = $1 AND dataset_id = $2
+`
+
+type DeleteDatasetRunParams struct {
+	ID        string `db:"id" json:"id"`
+	DatasetID string `db:"dataset_id" json:"dataset_id"`
+}
+
+func (q *Queries) DeleteDatasetRun(ctx context.Context, arg DeleteDatasetRunParams) error {
+	_, err := q.db.Exec(ctx, deleteDatasetRun, arg.ID, arg.DatasetID)
+	return err
+}
+
+const deleteEvaluatorConfig = `-- name: DeleteEvaluatorConfig :exec
+DELETE FROM evaluator_configs WHERE id = $1 AND project_id = $2
+`
+
+type DeleteEvaluatorConfigParams struct {
+	ID        string `db:"id" json:"id"`
+	ProjectID string `db:"project_id" json:"project_id"`
+}
+
+func (q *Queries) DeleteEvaluatorConfig(ctx context.Context, arg DeleteEvaluatorConfigParams) error {
+	_, err := q.db.Exec(ctx, deleteEvaluatorConfig, arg.ID, arg.ProjectID)
 	return err
 }
 
@@ -572,8 +1163,80 @@ func (q *Queries) DeleteMember(ctx context.Context, arg DeleteMemberParams) erro
 	return err
 }
 
+const deleteModelPrice = `-- name: DeleteModelPrice :exec
+DELETE FROM model_prices
+WHERE id = $1 AND (project_id = $2::TEXT OR (project_id IS NULL AND $2::TEXT = ''))
+`
+
+type DeleteModelPriceParams struct {
+	ID        string `db:"id" json:"id"`
+	ProjectID string `db:"project_id" json:"project_id"`
+}
+
+func (q *Queries) DeleteModelPrice(ctx context.Context, arg DeleteModelPriceParams) error {
+	_, err := q.db.Exec(ctx, deleteModelPrice, arg.ID, arg.ProjectID)
+	return err
+}
+
+const deletePromptByName = `-- name: DeletePromptByName :exec
+DELETE FROM prompts WHERE project_id = $1 AND name = $2
+`
+
+type DeletePromptByNameParams struct {
+	ProjectID string `db:"project_id" json:"project_id"`
+	Name      string `db:"name" json:"name"`
+}
+
+func (q *Queries) DeletePromptByName(ctx context.Context, arg DeletePromptByNameParams) error {
+	_, err := q.db.Exec(ctx, deletePromptByName, arg.ProjectID, arg.Name)
+	return err
+}
+
+const deletePromptVersion = `-- name: DeletePromptVersion :exec
+DELETE FROM prompts WHERE project_id = $1 AND name = $2 AND version = $3::INT
+`
+
+type DeletePromptVersionParams struct {
+	ProjectID string `db:"project_id" json:"project_id"`
+	Name      string `db:"name" json:"name"`
+	Version   int32  `db:"version" json:"version"`
+}
+
+func (q *Queries) DeletePromptVersion(ctx context.Context, arg DeletePromptVersionParams) error {
+	_, err := q.db.Exec(ctx, deletePromptVersion, arg.ProjectID, arg.Name, arg.Version)
+	return err
+}
+
+const deleteScore = `-- name: DeleteScore :exec
+DELETE FROM scores WHERE id = $1 AND project_id = $2
+`
+
+type DeleteScoreParams struct {
+	ID        string `db:"id" json:"id"`
+	ProjectID string `db:"project_id" json:"project_id"`
+}
+
+func (q *Queries) DeleteScore(ctx context.Context, arg DeleteScoreParams) error {
+	_, err := q.db.Exec(ctx, deleteScore, arg.ID, arg.ProjectID)
+	return err
+}
+
+const deleteTrace = `-- name: DeleteTrace :exec
+DELETE FROM traces WHERE id = $1 AND project_id = $2
+`
+
+type DeleteTraceParams struct {
+	ID        string `db:"id" json:"id"`
+	ProjectID string `db:"project_id" json:"project_id"`
+}
+
+func (q *Queries) DeleteTrace(ctx context.Context, arg DeleteTraceParams) error {
+	_, err := q.db.Exec(ctx, deleteTrace, arg.ID, arg.ProjectID)
+	return err
+}
+
 const getAPIKeyByKey = `-- name: GetAPIKeyByKey :one
-SELECT id, project_id, key, name, created_at FROM api_keys WHERE key = $1
+SELECT id, project_id, key, name, created_at, public_key, secret_key_hash, display_secret_key, last_used_at, expires_at FROM api_keys WHERE key = $1
 `
 
 func (q *Queries) GetAPIKeyByKey(ctx context.Context, key string) (ApiKey, error) {
@@ -585,12 +1248,39 @@ func (q *Queries) GetAPIKeyByKey(ctx context.Context, key string) (ApiKey, error
 		&i.Key,
 		&i.Name,
 		&i.CreatedAt,
+		&i.PublicKey,
+		&i.SecretKeyHash,
+		&i.DisplaySecretKey,
+		&i.LastUsedAt,
+		&i.ExpiresAt,
+	)
+	return i, err
+}
+
+const getAPIKeyByPublicKey = `-- name: GetAPIKeyByPublicKey :one
+SELECT id, project_id, key, name, created_at, public_key, secret_key_hash, display_secret_key, last_used_at, expires_at FROM api_keys WHERE public_key = $1
+`
+
+func (q *Queries) GetAPIKeyByPublicKey(ctx context.Context, publicKey pgtype.Text) (ApiKey, error) {
+	row := q.db.QueryRow(ctx, getAPIKeyByPublicKey, publicKey)
+	var i ApiKey
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Key,
+		&i.Name,
+		&i.CreatedAt,
+		&i.PublicKey,
+		&i.SecretKeyHash,
+		&i.DisplaySecretKey,
+		&i.LastUsedAt,
+		&i.ExpiresAt,
 	)
 	return i, err
 }
 
 const getAPIKeysByProjectID = `-- name: GetAPIKeysByProjectID :many
-SELECT id, project_id, key, name, created_at FROM api_keys WHERE project_id = $1 ORDER BY created_at DESC
+SELECT id, project_id, key, name, created_at, public_key, secret_key_hash, display_secret_key, last_used_at, expires_at FROM api_keys WHERE project_id = $1 ORDER BY created_at DESC
 `
 
 func (q *Queries) GetAPIKeysByProjectID(ctx context.Context, projectID string) ([]ApiKey, error) {
@@ -608,6 +1298,11 @@ func (q *Queries) GetAPIKeysByProjectID(ctx context.Context, projectID string) (
 			&i.Key,
 			&i.Name,
 			&i.CreatedAt,
+			&i.PublicKey,
+			&i.SecretKeyHash,
+			&i.DisplaySecretKey,
+			&i.LastUsedAt,
+			&i.ExpiresAt,
 		); err != nil {
 			return nil, err
 		}
@@ -620,7 +1315,7 @@ func (q *Queries) GetAPIKeysByProjectID(ctx context.Context, projectID string) (
 }
 
 const getActivePromptByName = `-- name: GetActivePromptByName :one
-SELECT id, project_id, name, version, prompt, config, is_active, created_at FROM prompts WHERE project_id = $1 AND name = $2 AND is_active = true ORDER BY version DESC LIMIT 1
+SELECT id, project_id, name, version, prompt, config, is_active, created_at, type, labels, tags, commit_message, created_by FROM prompts WHERE project_id = $1 AND name = $2 AND is_active = true ORDER BY version DESC LIMIT 1
 `
 
 type GetActivePromptByNameParams struct {
@@ -640,8 +1335,72 @@ func (q *Queries) GetActivePromptByName(ctx context.Context, arg GetActivePrompt
 		&i.Config,
 		&i.IsActive,
 		&i.CreatedAt,
+		&i.Type,
+		&i.Labels,
+		&i.Tags,
+		&i.CommitMessage,
+		&i.CreatedBy,
 	)
 	return i, err
+}
+
+const getCostByUser = `-- name: GetCostByUser :many
+SELECT
+  COALESCE(user_id, 'anonymous')                   AS user_id,
+  COUNT(*)::BIGINT                                 AS trace_count,
+  COALESCE(SUM(total_cost), 0)::DOUBLE PRECISION   AS total_cost,
+  COALESCE(SUM((token_usage->>'total_tokens')::BIGINT), 0)::BIGINT AS total_tokens
+FROM traces
+WHERE project_id = $2::TEXT
+  AND ($3::TIMESTAMPTZ IS NULL OR start_time >= $3::TIMESTAMPTZ)
+  AND ($4::TIMESTAMPTZ   IS NULL OR start_time <  $4::TIMESTAMPTZ)
+GROUP BY COALESCE(user_id, 'anonymous')
+ORDER BY total_cost DESC
+LIMIT $1
+`
+
+type GetCostByUserParams struct {
+	Limit     int32              `db:"limit" json:"limit"`
+	ProjectID string             `db:"project_id" json:"project_id"`
+	FromTime  pgtype.Timestamptz `db:"from_time" json:"from_time"`
+	ToTime    pgtype.Timestamptz `db:"to_time" json:"to_time"`
+}
+
+type GetCostByUserRow struct {
+	UserID      string  `db:"user_id" json:"user_id"`
+	TraceCount  int64   `db:"trace_count" json:"trace_count"`
+	TotalCost   float64 `db:"total_cost" json:"total_cost"`
+	TotalTokens int64   `db:"total_tokens" json:"total_tokens"`
+}
+
+func (q *Queries) GetCostByUser(ctx context.Context, arg GetCostByUserParams) ([]GetCostByUserRow, error) {
+	rows, err := q.db.Query(ctx, getCostByUser,
+		arg.Limit,
+		arg.ProjectID,
+		arg.FromTime,
+		arg.ToTime,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetCostByUserRow{}
+	for rows.Next() {
+		var i GetCostByUserRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.TraceCount,
+			&i.TotalCost,
+			&i.TotalTokens,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getDatasetByID = `-- name: GetDatasetByID :one
@@ -661,8 +1420,56 @@ func (q *Queries) GetDatasetByID(ctx context.Context, id string) (Dataset, error
 	return i, err
 }
 
+const getDatasetByIDAndProject = `-- name: GetDatasetByIDAndProject :one
+
+SELECT id, project_id, name, description, created_at FROM datasets WHERE id = $1 AND project_id = $2
+`
+
+type GetDatasetByIDAndProjectParams struct {
+	ID        string `db:"id" json:"id"`
+	ProjectID string `db:"project_id" json:"project_id"`
+}
+
+// ===========================================================================
+// Datasets — project-scoped access
+// ===========================================================================
+func (q *Queries) GetDatasetByIDAndProject(ctx context.Context, arg GetDatasetByIDAndProjectParams) (Dataset, error) {
+	row := q.db.QueryRow(ctx, getDatasetByIDAndProject, arg.ID, arg.ProjectID)
+	var i Dataset
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Description,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getDatasetByNameAndProject = `-- name: GetDatasetByNameAndProject :one
+SELECT id, project_id, name, description, created_at FROM datasets WHERE name = $1 AND project_id = $2
+`
+
+type GetDatasetByNameAndProjectParams struct {
+	Name      string `db:"name" json:"name"`
+	ProjectID string `db:"project_id" json:"project_id"`
+}
+
+func (q *Queries) GetDatasetByNameAndProject(ctx context.Context, arg GetDatasetByNameAndProjectParams) (Dataset, error) {
+	row := q.db.QueryRow(ctx, getDatasetByNameAndProject, arg.Name, arg.ProjectID)
+	var i Dataset
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Description,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getDatasetItemByID = `-- name: GetDatasetItemByID :one
-SELECT id, dataset_id, input, expected_output, metadata, source_trace_id, created_at FROM dataset_items WHERE id = $1
+SELECT id, dataset_id, input, expected_output, metadata, source_trace_id, created_at, status, source_observation_id FROM dataset_items WHERE id = $1
 `
 
 func (q *Queries) GetDatasetItemByID(ctx context.Context, id string) (DatasetItem, error) {
@@ -676,12 +1483,14 @@ func (q *Queries) GetDatasetItemByID(ctx context.Context, id string) (DatasetIte
 		&i.Metadata,
 		&i.SourceTraceID,
 		&i.CreatedAt,
+		&i.Status,
+		&i.SourceObservationID,
 	)
 	return i, err
 }
 
 const getDatasetItemsByDatasetID = `-- name: GetDatasetItemsByDatasetID :many
-SELECT id, dataset_id, input, expected_output, metadata, source_trace_id, created_at FROM dataset_items WHERE dataset_id = $1 ORDER BY created_at
+SELECT id, dataset_id, input, expected_output, metadata, source_trace_id, created_at, status, source_observation_id FROM dataset_items WHERE dataset_id = $1 ORDER BY created_at
 `
 
 func (q *Queries) GetDatasetItemsByDatasetID(ctx context.Context, datasetID string) ([]DatasetItem, error) {
@@ -701,6 +1510,8 @@ func (q *Queries) GetDatasetItemsByDatasetID(ctx context.Context, datasetID stri
 			&i.Metadata,
 			&i.SourceTraceID,
 			&i.CreatedAt,
+			&i.Status,
+			&i.SourceObservationID,
 		); err != nil {
 			return nil, err
 		}
@@ -713,7 +1524,7 @@ func (q *Queries) GetDatasetItemsByDatasetID(ctx context.Context, datasetID stri
 }
 
 const getDatasetRunByID = `-- name: GetDatasetRunByID :one
-SELECT id, dataset_id, name, created_at FROM dataset_runs WHERE id = $1
+SELECT id, dataset_id, name, created_at, description, metadata FROM dataset_runs WHERE id = $1
 `
 
 func (q *Queries) GetDatasetRunByID(ctx context.Context, id string) (DatasetRun, error) {
@@ -724,12 +1535,60 @@ func (q *Queries) GetDatasetRunByID(ctx context.Context, id string) (DatasetRun,
 		&i.DatasetID,
 		&i.Name,
 		&i.CreatedAt,
+		&i.Description,
+		&i.Metadata,
+	)
+	return i, err
+}
+
+const getDatasetRunByIDAndDataset = `-- name: GetDatasetRunByIDAndDataset :one
+SELECT id, dataset_id, name, created_at, description, metadata FROM dataset_runs WHERE id = $1 AND dataset_id = $2
+`
+
+type GetDatasetRunByIDAndDatasetParams struct {
+	ID        string `db:"id" json:"id"`
+	DatasetID string `db:"dataset_id" json:"dataset_id"`
+}
+
+func (q *Queries) GetDatasetRunByIDAndDataset(ctx context.Context, arg GetDatasetRunByIDAndDatasetParams) (DatasetRun, error) {
+	row := q.db.QueryRow(ctx, getDatasetRunByIDAndDataset, arg.ID, arg.DatasetID)
+	var i DatasetRun
+	err := row.Scan(
+		&i.ID,
+		&i.DatasetID,
+		&i.Name,
+		&i.CreatedAt,
+		&i.Description,
+		&i.Metadata,
+	)
+	return i, err
+}
+
+const getDatasetRunByNameAndDataset = `-- name: GetDatasetRunByNameAndDataset :one
+SELECT id, dataset_id, name, created_at, description, metadata FROM dataset_runs WHERE name = $1 AND dataset_id = $2
+`
+
+type GetDatasetRunByNameAndDatasetParams struct {
+	Name      string `db:"name" json:"name"`
+	DatasetID string `db:"dataset_id" json:"dataset_id"`
+}
+
+func (q *Queries) GetDatasetRunByNameAndDataset(ctx context.Context, arg GetDatasetRunByNameAndDatasetParams) (DatasetRun, error) {
+	row := q.db.QueryRow(ctx, getDatasetRunByNameAndDataset, arg.Name, arg.DatasetID)
+	var i DatasetRun
+	err := row.Scan(
+		&i.ID,
+		&i.DatasetID,
+		&i.Name,
+		&i.CreatedAt,
+		&i.Description,
+		&i.Metadata,
 	)
 	return i, err
 }
 
 const getDatasetRunItemByID = `-- name: GetDatasetRunItemByID :one
-SELECT id, dataset_run_id, dataset_item_id, observation_id, score_id, created_at FROM dataset_run_items WHERE id = $1
+SELECT id, dataset_run_id, dataset_item_id, observation_id, score_id, created_at, trace_id FROM dataset_run_items WHERE id = $1
 `
 
 func (q *Queries) GetDatasetRunItemByID(ctx context.Context, id string) (DatasetRunItem, error) {
@@ -742,12 +1601,13 @@ func (q *Queries) GetDatasetRunItemByID(ctx context.Context, id string) (Dataset
 		&i.ObservationID,
 		&i.ScoreID,
 		&i.CreatedAt,
+		&i.TraceID,
 	)
 	return i, err
 }
 
 const getDatasetRunItemsByRunID = `-- name: GetDatasetRunItemsByRunID :many
-SELECT id, dataset_run_id, dataset_item_id, observation_id, score_id, created_at FROM dataset_run_items WHERE dataset_run_id = $1 ORDER BY created_at
+SELECT id, dataset_run_id, dataset_item_id, observation_id, score_id, created_at, trace_id FROM dataset_run_items WHERE dataset_run_id = $1 ORDER BY created_at
 `
 
 func (q *Queries) GetDatasetRunItemsByRunID(ctx context.Context, datasetRunID string) ([]DatasetRunItem, error) {
@@ -766,6 +1626,7 @@ func (q *Queries) GetDatasetRunItemsByRunID(ctx context.Context, datasetRunID st
 			&i.ObservationID,
 			&i.ScoreID,
 			&i.CreatedAt,
+			&i.TraceID,
 		); err != nil {
 			return nil, err
 		}
@@ -777,8 +1638,184 @@ func (q *Queries) GetDatasetRunItemsByRunID(ctx context.Context, datasetRunID st
 	return items, nil
 }
 
+const getDatasetRunItemsWithDetail = `-- name: GetDatasetRunItemsWithDetail :many
+SELECT
+  ri.id             AS run_item_id,
+  ri.dataset_item_id,
+  ri.trace_id,
+  ri.observation_id,
+  ri.score_id,
+  ri.created_at,
+  di.input          AS item_input,
+  di.expected_output,
+  di.metadata       AS item_metadata,
+  t.output          AS trace_output,
+  t.total_cost,
+  t.token_usage,
+  EXTRACT(EPOCH FROM (t.end_time - t.start_time))::DOUBLE PRECISION AS latency_seconds
+FROM dataset_run_items ri
+JOIN dataset_items di ON di.id = ri.dataset_item_id
+LEFT JOIN traces t    ON t.id = ri.trace_id
+WHERE ri.dataset_run_id = $1
+ORDER BY ri.created_at
+`
+
+type GetDatasetRunItemsWithDetailRow struct {
+	RunItemID      string             `db:"run_item_id" json:"run_item_id"`
+	DatasetItemID  string             `db:"dataset_item_id" json:"dataset_item_id"`
+	TraceID        pgtype.Text        `db:"trace_id" json:"trace_id"`
+	ObservationID  pgtype.Text        `db:"observation_id" json:"observation_id"`
+	ScoreID        pgtype.Text        `db:"score_id" json:"score_id"`
+	CreatedAt      pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	ItemInput      json.RawMessage    `db:"item_input" json:"item_input"`
+	ExpectedOutput json.RawMessage    `db:"expected_output" json:"expected_output"`
+	ItemMetadata   json.RawMessage    `db:"item_metadata" json:"item_metadata"`
+	TraceOutput    json.RawMessage    `db:"trace_output" json:"trace_output"`
+	TotalCost      pgtype.Float8      `db:"total_cost" json:"total_cost"`
+	TokenUsage     json.RawMessage    `db:"token_usage" json:"token_usage"`
+	LatencySeconds float64            `db:"latency_seconds" json:"latency_seconds"`
+}
+
+// Run items joined to their dataset item and the trace that produced them, so
+// a run can be reported without an N+1 query per item.
+func (q *Queries) GetDatasetRunItemsWithDetail(ctx context.Context, datasetRunID string) ([]GetDatasetRunItemsWithDetailRow, error) {
+	rows, err := q.db.Query(ctx, getDatasetRunItemsWithDetail, datasetRunID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetDatasetRunItemsWithDetailRow{}
+	for rows.Next() {
+		var i GetDatasetRunItemsWithDetailRow
+		if err := rows.Scan(
+			&i.RunItemID,
+			&i.DatasetItemID,
+			&i.TraceID,
+			&i.ObservationID,
+			&i.ScoreID,
+			&i.CreatedAt,
+			&i.ItemInput,
+			&i.ExpectedOutput,
+			&i.ItemMetadata,
+			&i.TraceOutput,
+			&i.TotalCost,
+			&i.TokenUsage,
+			&i.LatencySeconds,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getDatasetRunScoreStats = `-- name: GetDatasetRunScoreStats :many
+SELECT
+  s.name,
+  COUNT(*)::BIGINT                     AS count,
+  AVG(s.value)::DOUBLE PRECISION       AS avg_value,
+  MIN(s.value)::DOUBLE PRECISION       AS min_value,
+  MAX(s.value)::DOUBLE PRECISION       AS max_value,
+  STDDEV_POP(s.value)::DOUBLE PRECISION AS stddev_value
+FROM dataset_run_items ri
+JOIN scores s
+  ON s.id = ri.score_id
+  OR s.dataset_run_id = ri.dataset_run_id
+  OR (ri.trace_id IS NOT NULL AND s.trace_id = ri.trace_id)
+WHERE ri.dataset_run_id = $1 AND s.value IS NOT NULL
+GROUP BY s.name
+ORDER BY s.name
+`
+
+type GetDatasetRunScoreStatsRow struct {
+	Name        string  `db:"name" json:"name"`
+	Count       int64   `db:"count" json:"count"`
+	AvgValue    float64 `db:"avg_value" json:"avg_value"`
+	MinValue    float64 `db:"min_value" json:"min_value"`
+	MaxValue    float64 `db:"max_value" json:"max_value"`
+	StddevValue float64 `db:"stddev_value" json:"stddev_value"`
+}
+
+// Per-score-name aggregates for one run. A score counts when it is attached to
+// the run item directly, to the run, or to the trace the run item produced.
+func (q *Queries) GetDatasetRunScoreStats(ctx context.Context, datasetRunID string) ([]GetDatasetRunScoreStatsRow, error) {
+	rows, err := q.db.Query(ctx, getDatasetRunScoreStats, datasetRunID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetDatasetRunScoreStatsRow{}
+	for rows.Next() {
+		var i GetDatasetRunScoreStatsRow
+		if err := rows.Scan(
+			&i.Name,
+			&i.Count,
+			&i.AvgValue,
+			&i.MinValue,
+			&i.MaxValue,
+			&i.StddevValue,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getDatasetRunStats = `-- name: GetDatasetRunStats :one
+SELECT
+  COUNT(*)::BIGINT                                  AS item_count,
+  COUNT(t.id)::BIGINT                               AS traced_count,
+  COALESCE(SUM(t.total_cost), 0)::DOUBLE PRECISION  AS total_cost,
+  COALESCE(AVG(t.total_cost), 0)::DOUBLE PRECISION  AS avg_cost,
+  COALESCE(SUM((t.token_usage->>'total_tokens')::BIGINT), 0)::BIGINT AS total_tokens,
+  COALESCE(AVG(EXTRACT(EPOCH FROM (t.end_time - t.start_time))), 0)::DOUBLE PRECISION AS avg_latency_seconds,
+  COALESCE(PERCENTILE_CONT(0.5) WITHIN GROUP (
+    ORDER BY EXTRACT(EPOCH FROM (t.end_time - t.start_time))), 0)::DOUBLE PRECISION   AS p50_latency_seconds,
+  COALESCE(PERCENTILE_CONT(0.95) WITHIN GROUP (
+    ORDER BY EXTRACT(EPOCH FROM (t.end_time - t.start_time))), 0)::DOUBLE PRECISION   AS p95_latency_seconds
+FROM dataset_run_items ri
+LEFT JOIN traces t ON t.id = ri.trace_id
+WHERE ri.dataset_run_id = $1
+`
+
+type GetDatasetRunStatsRow struct {
+	ItemCount         int64   `db:"item_count" json:"item_count"`
+	TracedCount       int64   `db:"traced_count" json:"traced_count"`
+	TotalCost         float64 `db:"total_cost" json:"total_cost"`
+	AvgCost           float64 `db:"avg_cost" json:"avg_cost"`
+	TotalTokens       int64   `db:"total_tokens" json:"total_tokens"`
+	AvgLatencySeconds float64 `db:"avg_latency_seconds" json:"avg_latency_seconds"`
+	P50LatencySeconds float64 `db:"p50_latency_seconds" json:"p50_latency_seconds"`
+	P95LatencySeconds float64 `db:"p95_latency_seconds" json:"p95_latency_seconds"`
+}
+
+// Aggregate cost and latency for one run. Percentiles come from Postgres
+// directly so the whole run never has to be loaded into the process.
+func (q *Queries) GetDatasetRunStats(ctx context.Context, datasetRunID string) (GetDatasetRunStatsRow, error) {
+	row := q.db.QueryRow(ctx, getDatasetRunStats, datasetRunID)
+	var i GetDatasetRunStatsRow
+	err := row.Scan(
+		&i.ItemCount,
+		&i.TracedCount,
+		&i.TotalCost,
+		&i.AvgCost,
+		&i.TotalTokens,
+		&i.AvgLatencySeconds,
+		&i.P50LatencySeconds,
+		&i.P95LatencySeconds,
+	)
+	return i, err
+}
+
 const getDatasetRunsByDatasetID = `-- name: GetDatasetRunsByDatasetID :many
-SELECT id, dataset_id, name, created_at FROM dataset_runs WHERE dataset_id = $1 ORDER BY created_at DESC
+SELECT id, dataset_id, name, created_at, description, metadata FROM dataset_runs WHERE dataset_id = $1 ORDER BY created_at DESC
 `
 
 func (q *Queries) GetDatasetRunsByDatasetID(ctx context.Context, datasetID string) ([]DatasetRun, error) {
@@ -795,6 +1832,8 @@ func (q *Queries) GetDatasetRunsByDatasetID(ctx context.Context, datasetID strin
 			&i.DatasetID,
 			&i.Name,
 			&i.CreatedAt,
+			&i.Description,
+			&i.Metadata,
 		); err != nil {
 			return nil, err
 		}
@@ -842,6 +1881,30 @@ SELECT id, project_id, evaluator_config_id, name, status, result_summary, create
 
 func (q *Queries) GetEvaluationRunByID(ctx context.Context, id string) (EvaluationRun, error) {
 	row := q.db.QueryRow(ctx, getEvaluationRunByID, id)
+	var i EvaluationRun
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.EvaluatorConfigID,
+		&i.Name,
+		&i.Status,
+		&i.ResultSummary,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getEvaluationRunByIDAndProject = `-- name: GetEvaluationRunByIDAndProject :one
+SELECT id, project_id, evaluator_config_id, name, status, result_summary, created_at FROM evaluation_runs WHERE id = $1 AND project_id = $2
+`
+
+type GetEvaluationRunByIDAndProjectParams struct {
+	ID        string `db:"id" json:"id"`
+	ProjectID string `db:"project_id" json:"project_id"`
+}
+
+func (q *Queries) GetEvaluationRunByIDAndProject(ctx context.Context, arg GetEvaluationRunByIDAndProjectParams) (EvaluationRun, error) {
+	row := q.db.QueryRow(ctx, getEvaluationRunByIDAndProject, arg.ID, arg.ProjectID)
 	var i EvaluationRun
 	err := row.Scan(
 		&i.ID,
@@ -907,6 +1970,31 @@ func (q *Queries) GetEvaluatorConfigByID(ctx context.Context, id string) (Evalua
 	return i, err
 }
 
+const getEvaluatorConfigByIDAndProject = `-- name: GetEvaluatorConfigByIDAndProject :one
+SELECT id, project_id, name, description, type, config, is_active, created_at FROM evaluator_configs WHERE id = $1 AND project_id = $2
+`
+
+type GetEvaluatorConfigByIDAndProjectParams struct {
+	ID        string `db:"id" json:"id"`
+	ProjectID string `db:"project_id" json:"project_id"`
+}
+
+func (q *Queries) GetEvaluatorConfigByIDAndProject(ctx context.Context, arg GetEvaluatorConfigByIDAndProjectParams) (EvaluatorConfig, error) {
+	row := q.db.QueryRow(ctx, getEvaluatorConfigByIDAndProject, arg.ID, arg.ProjectID)
+	var i EvaluatorConfig
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Description,
+		&i.Type,
+		&i.Config,
+		&i.IsActive,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getEvaluatorConfigsByProjectID = `-- name: GetEvaluatorConfigsByProjectID :many
 SELECT id, project_id, name, description, type, config, is_active, created_at FROM evaluator_configs WHERE project_id = $1 ORDER BY created_at DESC
 `
@@ -940,6 +2028,56 @@ func (q *Queries) GetEvaluatorConfigsByProjectID(ctx context.Context, projectID 
 	return items, nil
 }
 
+const getLatestPrompt = `-- name: GetLatestPrompt :one
+SELECT id, project_id, name, version, prompt, config, is_active, created_at, type, labels, tags, commit_message, created_by FROM prompts
+WHERE project_id = $1 AND name = $2
+ORDER BY version DESC
+LIMIT 1
+`
+
+type GetLatestPromptParams struct {
+	ProjectID string `db:"project_id" json:"project_id"`
+	Name      string `db:"name" json:"name"`
+}
+
+func (q *Queries) GetLatestPrompt(ctx context.Context, arg GetLatestPromptParams) (Prompt, error) {
+	row := q.db.QueryRow(ctx, getLatestPrompt, arg.ProjectID, arg.Name)
+	var i Prompt
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Version,
+		&i.Prompt,
+		&i.Config,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.Type,
+		&i.Labels,
+		&i.Tags,
+		&i.CommitMessage,
+		&i.CreatedBy,
+	)
+	return i, err
+}
+
+const getMaxPromptVersion = `-- name: GetMaxPromptVersion :one
+SELECT COALESCE(MAX(version), 0)::INT AS max_version
+FROM prompts WHERE project_id = $1 AND name = $2
+`
+
+type GetMaxPromptVersionParams struct {
+	ProjectID string `db:"project_id" json:"project_id"`
+	Name      string `db:"name" json:"name"`
+}
+
+func (q *Queries) GetMaxPromptVersion(ctx context.Context, arg GetMaxPromptVersionParams) (int32, error) {
+	row := q.db.QueryRow(ctx, getMaxPromptVersion, arg.ProjectID, arg.Name)
+	var max_version int32
+	err := row.Scan(&max_version)
+	return max_version, err
+}
+
 const getMemberByUserAndOrg = `-- name: GetMemberByUserAndOrg :one
 SELECT id, user_id, org_id, role FROM members WHERE user_id = $1 AND org_id = $2
 `
@@ -959,6 +2097,25 @@ func (q *Queries) GetMemberByUserAndOrg(ctx context.Context, arg GetMemberByUser
 		&i.Role,
 	)
 	return i, err
+}
+
+const getMemberRoleForProject = `-- name: GetMemberRoleForProject :one
+SELECT m.role FROM projects p
+JOIN members m ON m.org_id = p.org_id
+WHERE p.id = $1 AND m.user_id = $2
+`
+
+type GetMemberRoleForProjectParams struct {
+	ID     string `db:"id" json:"id"`
+	UserID string `db:"user_id" json:"user_id"`
+}
+
+// Returns the caller's role in the organization owning the project.
+func (q *Queries) GetMemberRoleForProject(ctx context.Context, arg GetMemberRoleForProjectParams) (string, error) {
+	row := q.db.QueryRow(ctx, getMemberRoleForProject, arg.ID, arg.UserID)
+	var role string
+	err := row.Scan(&role)
+	return role, err
 }
 
 const getMembersByOrgID = `-- name: GetMembersByOrgID :many
@@ -1004,8 +2161,96 @@ func (q *Queries) GetMembersByOrgID(ctx context.Context, orgID string) ([]GetMem
 	return items, nil
 }
 
+const getModelPriceByID = `-- name: GetModelPriceByID :one
+SELECT id, project_id, model_name, match_pattern, unit, input_price, output_price, total_price, currency, created_at FROM model_prices WHERE id = $1
+`
+
+func (q *Queries) GetModelPriceByID(ctx context.Context, id string) (ModelPrice, error) {
+	row := q.db.QueryRow(ctx, getModelPriceByID, id)
+	var i ModelPrice
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.ModelName,
+		&i.MatchPattern,
+		&i.Unit,
+		&i.InputPrice,
+		&i.OutputPrice,
+		&i.TotalPrice,
+		&i.Currency,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getModelUsageStats = `-- name: GetModelUsageStats :many
+SELECT
+  COALESCE(o.model, 'unknown')                      AS model,
+  COUNT(*)::BIGINT                                  AS generation_count,
+  COALESCE(SUM(o.cost), 0)::DOUBLE PRECISION        AS total_cost,
+  COALESCE(AVG(o.cost), 0)::DOUBLE PRECISION        AS avg_cost,
+  COALESCE(SUM((o.token_usage->>'input_tokens')::BIGINT), 0)::BIGINT  AS input_tokens,
+  COALESCE(SUM((o.token_usage->>'output_tokens')::BIGINT), 0)::BIGINT AS output_tokens,
+  COALESCE(SUM((o.token_usage->>'total_tokens')::BIGINT), 0)::BIGINT  AS total_tokens,
+  COALESCE(AVG(EXTRACT(EPOCH FROM (o.end_time - o.start_time))), 0)::DOUBLE PRECISION AS avg_latency_seconds
+FROM observations o
+WHERE o.project_id = $1::TEXT
+  AND o.type = 'GENERATION'
+  AND ($2::TIMESTAMPTZ IS NULL OR o.start_time >= $2::TIMESTAMPTZ)
+  AND ($3::TIMESTAMPTZ   IS NULL OR o.start_time <  $3::TIMESTAMPTZ)
+GROUP BY COALESCE(o.model, 'unknown')
+ORDER BY total_cost DESC
+`
+
+type GetModelUsageStatsParams struct {
+	ProjectID string             `db:"project_id" json:"project_id"`
+	FromTime  pgtype.Timestamptz `db:"from_time" json:"from_time"`
+	ToTime    pgtype.Timestamptz `db:"to_time" json:"to_time"`
+}
+
+type GetModelUsageStatsRow struct {
+	Model             string  `db:"model" json:"model"`
+	GenerationCount   int64   `db:"generation_count" json:"generation_count"`
+	TotalCost         float64 `db:"total_cost" json:"total_cost"`
+	AvgCost           float64 `db:"avg_cost" json:"avg_cost"`
+	InputTokens       int64   `db:"input_tokens" json:"input_tokens"`
+	OutputTokens      int64   `db:"output_tokens" json:"output_tokens"`
+	TotalTokens       int64   `db:"total_tokens" json:"total_tokens"`
+	AvgLatencySeconds float64 `db:"avg_latency_seconds" json:"avg_latency_seconds"`
+}
+
+// Cost and token usage broken down by model, for the cost-analysis view.
+func (q *Queries) GetModelUsageStats(ctx context.Context, arg GetModelUsageStatsParams) ([]GetModelUsageStatsRow, error) {
+	rows, err := q.db.Query(ctx, getModelUsageStats, arg.ProjectID, arg.FromTime, arg.ToTime)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetModelUsageStatsRow{}
+	for rows.Next() {
+		var i GetModelUsageStatsRow
+		if err := rows.Scan(
+			&i.Model,
+			&i.GenerationCount,
+			&i.TotalCost,
+			&i.AvgCost,
+			&i.InputTokens,
+			&i.OutputTokens,
+			&i.TotalTokens,
+			&i.AvgLatencySeconds,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getObservationByID = `-- name: GetObservationByID :one
-SELECT id, trace_id, type, name, input, output, metadata, model, model_parameters, start_time, end_time, token_usage, cost, status, parent_observation_id FROM observations WHERE id = $1
+SELECT id, trace_id, type, name, input, output, metadata, model, model_parameters, start_time, end_time, token_usage, cost, status, parent_observation_id, project_id, level, status_message, completion_start_time, prompt_id, prompt_name, prompt_version, usage_details, cost_details, version, environment, created_at FROM observations WHERE id = $1
 `
 
 func (q *Queries) GetObservationByID(ctx context.Context, id string) (Observation, error) {
@@ -1027,12 +2272,68 @@ func (q *Queries) GetObservationByID(ctx context.Context, id string) (Observatio
 		&i.Cost,
 		&i.Status,
 		&i.ParentObservationID,
+		&i.ProjectID,
+		&i.Level,
+		&i.StatusMessage,
+		&i.CompletionStartTime,
+		&i.PromptID,
+		&i.PromptName,
+		&i.PromptVersion,
+		&i.UsageDetails,
+		&i.CostDetails,
+		&i.Version,
+		&i.Environment,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getObservationByIDAndProject = `-- name: GetObservationByIDAndProject :one
+SELECT id, trace_id, type, name, input, output, metadata, model, model_parameters, start_time, end_time, token_usage, cost, status, parent_observation_id, project_id, level, status_message, completion_start_time, prompt_id, prompt_name, prompt_version, usage_details, cost_details, version, environment, created_at FROM observations WHERE id = $1 AND project_id = $2
+`
+
+type GetObservationByIDAndProjectParams struct {
+	ID        string `db:"id" json:"id"`
+	ProjectID string `db:"project_id" json:"project_id"`
+}
+
+func (q *Queries) GetObservationByIDAndProject(ctx context.Context, arg GetObservationByIDAndProjectParams) (Observation, error) {
+	row := q.db.QueryRow(ctx, getObservationByIDAndProject, arg.ID, arg.ProjectID)
+	var i Observation
+	err := row.Scan(
+		&i.ID,
+		&i.TraceID,
+		&i.Type,
+		&i.Name,
+		&i.Input,
+		&i.Output,
+		&i.Metadata,
+		&i.Model,
+		&i.ModelParameters,
+		&i.StartTime,
+		&i.EndTime,
+		&i.TokenUsage,
+		&i.Cost,
+		&i.Status,
+		&i.ParentObservationID,
+		&i.ProjectID,
+		&i.Level,
+		&i.StatusMessage,
+		&i.CompletionStartTime,
+		&i.PromptID,
+		&i.PromptName,
+		&i.PromptVersion,
+		&i.UsageDetails,
+		&i.CostDetails,
+		&i.Version,
+		&i.Environment,
+		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const getObservationsByTraceID = `-- name: GetObservationsByTraceID :many
-SELECT id, trace_id, type, name, input, output, metadata, model, model_parameters, start_time, end_time, token_usage, cost, status, parent_observation_id FROM observations 
+SELECT id, trace_id, type, name, input, output, metadata, model, model_parameters, start_time, end_time, token_usage, cost, status, parent_observation_id, project_id, level, status_message, completion_start_time, prompt_id, prompt_name, prompt_version, usage_details, cost_details, version, environment, created_at FROM observations 
 WHERE trace_id = $1 
 ORDER BY start_time ASC
 `
@@ -1062,6 +2363,77 @@ func (q *Queries) GetObservationsByTraceID(ctx context.Context, traceID string) 
 			&i.Cost,
 			&i.Status,
 			&i.ParentObservationID,
+			&i.ProjectID,
+			&i.Level,
+			&i.StatusMessage,
+			&i.CompletionStartTime,
+			&i.PromptID,
+			&i.PromptName,
+			&i.PromptVersion,
+			&i.UsageDetails,
+			&i.CostDetails,
+			&i.Version,
+			&i.Environment,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getObservationsByTraceIDAndProject = `-- name: GetObservationsByTraceIDAndProject :many
+SELECT id, trace_id, type, name, input, output, metadata, model, model_parameters, start_time, end_time, token_usage, cost, status, parent_observation_id, project_id, level, status_message, completion_start_time, prompt_id, prompt_name, prompt_version, usage_details, cost_details, version, environment, created_at FROM observations
+WHERE trace_id = $1 AND project_id = $2
+ORDER BY start_time ASC
+`
+
+type GetObservationsByTraceIDAndProjectParams struct {
+	TraceID   string `db:"trace_id" json:"trace_id"`
+	ProjectID string `db:"project_id" json:"project_id"`
+}
+
+func (q *Queries) GetObservationsByTraceIDAndProject(ctx context.Context, arg GetObservationsByTraceIDAndProjectParams) ([]Observation, error) {
+	rows, err := q.db.Query(ctx, getObservationsByTraceIDAndProject, arg.TraceID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Observation{}
+	for rows.Next() {
+		var i Observation
+		if err := rows.Scan(
+			&i.ID,
+			&i.TraceID,
+			&i.Type,
+			&i.Name,
+			&i.Input,
+			&i.Output,
+			&i.Metadata,
+			&i.Model,
+			&i.ModelParameters,
+			&i.StartTime,
+			&i.EndTime,
+			&i.TokenUsage,
+			&i.Cost,
+			&i.Status,
+			&i.ParentObservationID,
+			&i.ProjectID,
+			&i.Level,
+			&i.StatusMessage,
+			&i.CompletionStartTime,
+			&i.PromptID,
+			&i.PromptName,
+			&i.PromptVersion,
+			&i.UsageDetails,
+			&i.CostDetails,
+			&i.Version,
+			&i.Environment,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -1127,6 +2499,34 @@ func (q *Queries) GetProjectByID(ctx context.Context, id string) (Project, error
 	return i, err
 }
 
+const getProjectForUser = `-- name: GetProjectForUser :one
+
+SELECT p.id, p.name, p.org_id, p.created_at FROM projects p
+JOIN members m ON m.org_id = p.org_id
+WHERE p.id = $1 AND m.user_id = $2
+`
+
+type GetProjectForUserParams struct {
+	ID     string `db:"id" json:"id"`
+	UserID string `db:"user_id" json:"user_id"`
+}
+
+// ===========================================================================
+// Authorization
+// ===========================================================================
+// Returns the project only if the user belongs to the organization owning it.
+func (q *Queries) GetProjectForUser(ctx context.Context, arg GetProjectForUserParams) (Project, error) {
+	row := q.db.QueryRow(ctx, getProjectForUser, arg.ID, arg.UserID)
+	var i Project
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.OrgID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getProjectsByOrgID = `-- name: GetProjectsByOrgID :many
 SELECT id, name, org_id, created_at FROM projects WHERE org_id = $1 ORDER BY created_at DESC
 `
@@ -1157,7 +2557,7 @@ func (q *Queries) GetProjectsByOrgID(ctx context.Context, orgID string) ([]Proje
 }
 
 const getPromptByID = `-- name: GetPromptByID :one
-SELECT id, project_id, name, version, prompt, config, is_active, created_at FROM prompts WHERE id = $1
+SELECT id, project_id, name, version, prompt, config, is_active, created_at, type, labels, tags, commit_message, created_by FROM prompts WHERE id = $1
 `
 
 func (q *Queries) GetPromptByID(ctx context.Context, id string) (Prompt, error) {
@@ -1172,12 +2572,51 @@ func (q *Queries) GetPromptByID(ctx context.Context, id string) (Prompt, error) 
 		&i.Config,
 		&i.IsActive,
 		&i.CreatedAt,
+		&i.Type,
+		&i.Labels,
+		&i.Tags,
+		&i.CommitMessage,
+		&i.CreatedBy,
+	)
+	return i, err
+}
+
+const getPromptByLabel = `-- name: GetPromptByLabel :one
+SELECT id, project_id, name, version, prompt, config, is_active, created_at, type, labels, tags, commit_message, created_by FROM prompts
+WHERE project_id = $1 AND name = $2 AND labels @> ARRAY[$3::TEXT]
+ORDER BY version DESC
+LIMIT 1
+`
+
+type GetPromptByLabelParams struct {
+	ProjectID string `db:"project_id" json:"project_id"`
+	Name      string `db:"name" json:"name"`
+	Label     string `db:"label" json:"label"`
+}
+
+func (q *Queries) GetPromptByLabel(ctx context.Context, arg GetPromptByLabelParams) (Prompt, error) {
+	row := q.db.QueryRow(ctx, getPromptByLabel, arg.ProjectID, arg.Name, arg.Label)
+	var i Prompt
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Version,
+		&i.Prompt,
+		&i.Config,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.Type,
+		&i.Labels,
+		&i.Tags,
+		&i.CommitMessage,
+		&i.CreatedBy,
 	)
 	return i, err
 }
 
 const getPromptByNameAndVersion = `-- name: GetPromptByNameAndVersion :one
-SELECT id, project_id, name, version, prompt, config, is_active, created_at FROM prompts WHERE project_id = $1 AND name = $2 AND version = $3
+SELECT id, project_id, name, version, prompt, config, is_active, created_at, type, labels, tags, commit_message, created_by FROM prompts WHERE project_id = $1 AND name = $2 AND version = $3
 `
 
 type GetPromptByNameAndVersionParams struct {
@@ -1198,12 +2637,62 @@ func (q *Queries) GetPromptByNameAndVersion(ctx context.Context, arg GetPromptBy
 		&i.Config,
 		&i.IsActive,
 		&i.CreatedAt,
+		&i.Type,
+		&i.Labels,
+		&i.Tags,
+		&i.CommitMessage,
+		&i.CreatedBy,
 	)
 	return i, err
 }
 
+const getPromptVersions = `-- name: GetPromptVersions :many
+SELECT id, project_id, name, version, prompt, config, is_active, created_at, type, labels, tags, commit_message, created_by FROM prompts
+WHERE project_id = $1 AND name = $2
+ORDER BY version DESC
+`
+
+type GetPromptVersionsParams struct {
+	ProjectID string `db:"project_id" json:"project_id"`
+	Name      string `db:"name" json:"name"`
+}
+
+func (q *Queries) GetPromptVersions(ctx context.Context, arg GetPromptVersionsParams) ([]Prompt, error) {
+	rows, err := q.db.Query(ctx, getPromptVersions, arg.ProjectID, arg.Name)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Prompt{}
+	for rows.Next() {
+		var i Prompt
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Name,
+			&i.Version,
+			&i.Prompt,
+			&i.Config,
+			&i.IsActive,
+			&i.CreatedAt,
+			&i.Type,
+			&i.Labels,
+			&i.Tags,
+			&i.CommitMessage,
+			&i.CreatedBy,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getPromptsByProjectID = `-- name: GetPromptsByProjectID :many
-SELECT id, project_id, name, version, prompt, config, is_active, created_at FROM prompts 
+SELECT id, project_id, name, version, prompt, config, is_active, created_at, type, labels, tags, commit_message, created_by FROM prompts 
 WHERE project_id = $1 
 ORDER BY name, version DESC
 `
@@ -1226,6 +2715,11 @@ func (q *Queries) GetPromptsByProjectID(ctx context.Context, projectID string) (
 			&i.Config,
 			&i.IsActive,
 			&i.CreatedAt,
+			&i.Type,
+			&i.Labels,
+			&i.Tags,
+			&i.CommitMessage,
+			&i.CreatedBy,
 		); err != nil {
 			return nil, err
 		}
@@ -1240,8 +2734,7 @@ func (q *Queries) GetPromptsByProjectID(ctx context.Context, projectID string) (
 const getScoreAggregationByProjectID = `-- name: GetScoreAggregationByProjectID :many
 SELECT s.name, COUNT(*) as count, AVG(s.value) as avg_value, MIN(s.value) as min_value, MAX(s.value) as max_value
 FROM scores s
-JOIN traces t ON t.id = s.trace_id
-WHERE t.project_id = $1
+WHERE s.project_id = $1
 GROUP BY s.name
 ORDER BY s.name
 `
@@ -1281,7 +2774,7 @@ func (q *Queries) GetScoreAggregationByProjectID(ctx context.Context, projectID 
 }
 
 const getScoreByID = `-- name: GetScoreByID :one
-SELECT id, trace_id, name, value, comment, source, user_id, created_at FROM scores WHERE id = $1
+SELECT id, trace_id, name, value, comment, source, user_id, created_at, project_id, observation_id, session_id, dataset_run_id, data_type, string_value, config_id, metadata, environment FROM scores WHERE id = $1
 `
 
 func (q *Queries) GetScoreByID(ctx context.Context, id string) (Score, error) {
@@ -1296,12 +2789,55 @@ func (q *Queries) GetScoreByID(ctx context.Context, id string) (Score, error) {
 		&i.Source,
 		&i.UserID,
 		&i.CreatedAt,
+		&i.ProjectID,
+		&i.ObservationID,
+		&i.SessionID,
+		&i.DatasetRunID,
+		&i.DataType,
+		&i.StringValue,
+		&i.ConfigID,
+		&i.Metadata,
+		&i.Environment,
+	)
+	return i, err
+}
+
+const getScoreByIDAndProject = `-- name: GetScoreByIDAndProject :one
+SELECT id, trace_id, name, value, comment, source, user_id, created_at, project_id, observation_id, session_id, dataset_run_id, data_type, string_value, config_id, metadata, environment FROM scores WHERE id = $1 AND project_id = $2
+`
+
+type GetScoreByIDAndProjectParams struct {
+	ID        string `db:"id" json:"id"`
+	ProjectID string `db:"project_id" json:"project_id"`
+}
+
+func (q *Queries) GetScoreByIDAndProject(ctx context.Context, arg GetScoreByIDAndProjectParams) (Score, error) {
+	row := q.db.QueryRow(ctx, getScoreByIDAndProject, arg.ID, arg.ProjectID)
+	var i Score
+	err := row.Scan(
+		&i.ID,
+		&i.TraceID,
+		&i.Name,
+		&i.Value,
+		&i.Comment,
+		&i.Source,
+		&i.UserID,
+		&i.CreatedAt,
+		&i.ProjectID,
+		&i.ObservationID,
+		&i.SessionID,
+		&i.DatasetRunID,
+		&i.DataType,
+		&i.StringValue,
+		&i.ConfigID,
+		&i.Metadata,
+		&i.Environment,
 	)
 	return i, err
 }
 
 const getScoresByTraceID = `-- name: GetScoresByTraceID :many
-SELECT id, trace_id, name, value, comment, source, user_id, created_at FROM scores WHERE trace_id = $1 ORDER BY created_at DESC
+SELECT id, trace_id, name, value, comment, source, user_id, created_at, project_id, observation_id, session_id, dataset_run_id, data_type, string_value, config_id, metadata, environment FROM scores WHERE trace_id = $1::TEXT ORDER BY created_at DESC
 `
 
 func (q *Queries) GetScoresByTraceID(ctx context.Context, traceID string) ([]Score, error) {
@@ -1322,6 +2858,15 @@ func (q *Queries) GetScoresByTraceID(ctx context.Context, traceID string) ([]Sco
 			&i.Source,
 			&i.UserID,
 			&i.CreatedAt,
+			&i.ProjectID,
+			&i.ObservationID,
+			&i.SessionID,
+			&i.DatasetRunID,
+			&i.DataType,
+			&i.StringValue,
+			&i.ConfigID,
+			&i.Metadata,
+			&i.Environment,
 		); err != nil {
 			return nil, err
 		}
@@ -1334,7 +2879,9 @@ func (q *Queries) GetScoresByTraceID(ctx context.Context, traceID string) ([]Sco
 }
 
 const getScoresByTraceIDAndName = `-- name: GetScoresByTraceIDAndName :many
-SELECT id, trace_id, name, value, comment, source, user_id, created_at FROM scores WHERE trace_id = $1 AND name = $2 ORDER BY created_at DESC
+SELECT id, trace_id, name, value, comment, source, user_id, created_at, project_id, observation_id, session_id, dataset_run_id, data_type, string_value, config_id, metadata, environment FROM scores
+WHERE trace_id = $1::TEXT AND name = $2::TEXT
+ORDER BY created_at DESC
 `
 
 type GetScoresByTraceIDAndNameParams struct {
@@ -1360,6 +2907,15 @@ func (q *Queries) GetScoresByTraceIDAndName(ctx context.Context, arg GetScoresBy
 			&i.Source,
 			&i.UserID,
 			&i.CreatedAt,
+			&i.ProjectID,
+			&i.ObservationID,
+			&i.SessionID,
+			&i.DatasetRunID,
+			&i.DataType,
+			&i.StringValue,
+			&i.ConfigID,
+			&i.Metadata,
+			&i.Environment,
 		); err != nil {
 			return nil, err
 		}
@@ -1371,8 +2927,31 @@ func (q *Queries) GetScoresByTraceIDAndName(ctx context.Context, arg GetScoresBy
 	return items, nil
 }
 
+const getSession = `-- name: GetSession :one
+SELECT id, project_id, bookmarked, public, environment, created_at FROM sessions WHERE id = $1 AND project_id = $2
+`
+
+type GetSessionParams struct {
+	ID        string `db:"id" json:"id"`
+	ProjectID string `db:"project_id" json:"project_id"`
+}
+
+func (q *Queries) GetSession(ctx context.Context, arg GetSessionParams) (Session, error) {
+	row := q.db.QueryRow(ctx, getSession, arg.ID, arg.ProjectID)
+	var i Session
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Bookmarked,
+		&i.Public,
+		&i.Environment,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getTraceByID = `-- name: GetTraceByID :one
-SELECT id, project_id, name, input, output, metadata, user_id, session_id, tags, start_time, end_time, total_cost, token_usage, created_at FROM traces WHERE id = $1
+SELECT id, project_id, name, input, output, metadata, user_id, session_id, tags, start_time, end_time, total_cost, token_usage, created_at, release, version, public, bookmarked, environment, updated_at FROM traces WHERE id = $1
 `
 
 func (q *Queries) GetTraceByID(ctx context.Context, id string) (Trace, error) {
@@ -1393,6 +2972,49 @@ func (q *Queries) GetTraceByID(ctx context.Context, id string) (Trace, error) {
 		&i.TotalCost,
 		&i.TokenUsage,
 		&i.CreatedAt,
+		&i.Release,
+		&i.Version,
+		&i.Public,
+		&i.Bookmarked,
+		&i.Environment,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getTraceByIDAndProject = `-- name: GetTraceByIDAndProject :one
+SELECT id, project_id, name, input, output, metadata, user_id, session_id, tags, start_time, end_time, total_cost, token_usage, created_at, release, version, public, bookmarked, environment, updated_at FROM traces WHERE id = $1 AND project_id = $2
+`
+
+type GetTraceByIDAndProjectParams struct {
+	ID        string `db:"id" json:"id"`
+	ProjectID string `db:"project_id" json:"project_id"`
+}
+
+func (q *Queries) GetTraceByIDAndProject(ctx context.Context, arg GetTraceByIDAndProjectParams) (Trace, error) {
+	row := q.db.QueryRow(ctx, getTraceByIDAndProject, arg.ID, arg.ProjectID)
+	var i Trace
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Input,
+		&i.Output,
+		&i.Metadata,
+		&i.UserID,
+		&i.SessionID,
+		&i.Tags,
+		&i.StartTime,
+		&i.EndTime,
+		&i.TotalCost,
+		&i.TokenUsage,
+		&i.CreatedAt,
+		&i.Release,
+		&i.Version,
+		&i.Public,
+		&i.Bookmarked,
+		&i.Environment,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -1550,7 +3172,7 @@ SELECT
     SELECT 1 FROM observations o WHERE o.trace_id = traces.id AND o.status = 'ERROR'
   )) as error_traces
 FROM traces
-WHERE project_id = $1
+WHERE traces.project_id = $1
 `
 
 type GetTraceErrorRateByProjectIDRow struct {
@@ -1618,6 +3240,80 @@ func (q *Queries) GetTraceLatencyOverTimeByProjectID(ctx context.Context, arg Ge
 	return items, nil
 }
 
+const getTraceLatencyPercentiles = `-- name: GetTraceLatencyPercentiles :one
+
+SELECT
+  COUNT(*)::BIGINT AS total_traces,
+  COALESCE(AVG(EXTRACT(EPOCH FROM (end_time - start_time))), 0)::DOUBLE PRECISION AS avg_latency_seconds,
+  COALESCE(MIN(EXTRACT(EPOCH FROM (end_time - start_time))), 0)::DOUBLE PRECISION AS min_latency_seconds,
+  COALESCE(MAX(EXTRACT(EPOCH FROM (end_time - start_time))), 0)::DOUBLE PRECISION AS max_latency_seconds,
+  COALESCE(PERCENTILE_CONT(0.50) WITHIN GROUP (
+    ORDER BY EXTRACT(EPOCH FROM (end_time - start_time))), 0)::DOUBLE PRECISION AS p50_latency_seconds,
+  COALESCE(PERCENTILE_CONT(0.90) WITHIN GROUP (
+    ORDER BY EXTRACT(EPOCH FROM (end_time - start_time))), 0)::DOUBLE PRECISION AS p90_latency_seconds,
+  COALESCE(PERCENTILE_CONT(0.95) WITHIN GROUP (
+    ORDER BY EXTRACT(EPOCH FROM (end_time - start_time))), 0)::DOUBLE PRECISION AS p95_latency_seconds,
+  COALESCE(PERCENTILE_CONT(0.99) WITHIN GROUP (
+    ORDER BY EXTRACT(EPOCH FROM (end_time - start_time))), 0)::DOUBLE PRECISION AS p99_latency_seconds
+FROM traces
+WHERE project_id = $1::TEXT
+  AND end_time IS NOT NULL
+  AND (NULLIF($2::TEXT, '')     IS NULL OR user_id     = $2::TEXT)
+  AND (NULLIF($3::TEXT, '')  IS NULL OR session_id  = $3::TEXT)
+  AND (NULLIF($4::TEXT, '') IS NULL OR environment = $4::TEXT)
+  AND (cardinality($5::TEXT[]) = 0 OR tags @> $5::TEXT[])
+  AND ($6::TIMESTAMPTZ IS NULL OR start_time >= $6::TIMESTAMPTZ)
+  AND ($7::TIMESTAMPTZ   IS NULL OR start_time <  $7::TIMESTAMPTZ)
+`
+
+type GetTraceLatencyPercentilesParams struct {
+	ProjectID   string             `db:"project_id" json:"project_id"`
+	UserID      string             `db:"user_id" json:"user_id"`
+	SessionID   string             `db:"session_id" json:"session_id"`
+	Environment string             `db:"environment" json:"environment"`
+	Tags        []string           `db:"tags" json:"tags"`
+	FromTime    pgtype.Timestamptz `db:"from_time" json:"from_time"`
+	ToTime      pgtype.Timestamptz `db:"to_time" json:"to_time"`
+}
+
+type GetTraceLatencyPercentilesRow struct {
+	TotalTraces       int64   `db:"total_traces" json:"total_traces"`
+	AvgLatencySeconds float64 `db:"avg_latency_seconds" json:"avg_latency_seconds"`
+	MinLatencySeconds float64 `db:"min_latency_seconds" json:"min_latency_seconds"`
+	MaxLatencySeconds float64 `db:"max_latency_seconds" json:"max_latency_seconds"`
+	P50LatencySeconds float64 `db:"p50_latency_seconds" json:"p50_latency_seconds"`
+	P90LatencySeconds float64 `db:"p90_latency_seconds" json:"p90_latency_seconds"`
+	P95LatencySeconds float64 `db:"p95_latency_seconds" json:"p95_latency_seconds"`
+	P99LatencySeconds float64 `db:"p99_latency_seconds" json:"p99_latency_seconds"`
+}
+
+// ===========================================================================
+// Analytics — percentiles and filtered aggregates
+// ===========================================================================
+func (q *Queries) GetTraceLatencyPercentiles(ctx context.Context, arg GetTraceLatencyPercentilesParams) (GetTraceLatencyPercentilesRow, error) {
+	row := q.db.QueryRow(ctx, getTraceLatencyPercentiles,
+		arg.ProjectID,
+		arg.UserID,
+		arg.SessionID,
+		arg.Environment,
+		arg.Tags,
+		arg.FromTime,
+		arg.ToTime,
+	)
+	var i GetTraceLatencyPercentilesRow
+	err := row.Scan(
+		&i.TotalTraces,
+		&i.AvgLatencySeconds,
+		&i.MinLatencySeconds,
+		&i.MaxLatencySeconds,
+		&i.P50LatencySeconds,
+		&i.P90LatencySeconds,
+		&i.P95LatencySeconds,
+		&i.P99LatencySeconds,
+	)
+	return i, err
+}
+
 const getTraceLatencyStatsByProjectID = `-- name: GetTraceLatencyStatsByProjectID :one
 SELECT
   COUNT(*) as total_traces,
@@ -1645,6 +3341,98 @@ func (q *Queries) GetTraceLatencyStatsByProjectID(ctx context.Context, projectID
 		&i.MaxLatencySeconds,
 	)
 	return i, err
+}
+
+const getTraceMetricsOverTime = `-- name: GetTraceMetricsOverTime :many
+SELECT
+  date_bin($1::INTERVAL, start_time, $2::TIMESTAMPTZ)::TIMESTAMPTZ AS time_bucket,
+  COUNT(*)::BIGINT                                 AS trace_count,
+  COUNT(*) FILTER (WHERE EXISTS (
+    SELECT 1 FROM observations o WHERE o.trace_id = traces.id AND o.level = 'ERROR'
+  ))::BIGINT                                       AS error_count,
+  COALESCE(SUM(total_cost), 0)::DOUBLE PRECISION   AS total_cost,
+  COALESCE(SUM((token_usage->>'input_tokens')::BIGINT), 0)::BIGINT  AS input_tokens,
+  COALESCE(SUM((token_usage->>'output_tokens')::BIGINT), 0)::BIGINT AS output_tokens,
+  COALESCE(SUM((token_usage->>'total_tokens')::BIGINT), 0)::BIGINT  AS total_tokens,
+  COALESCE(AVG(EXTRACT(EPOCH FROM (end_time - start_time))), 0)::DOUBLE PRECISION AS avg_latency_seconds,
+  COALESCE(PERCENTILE_CONT(0.95) WITHIN GROUP (
+    ORDER BY EXTRACT(EPOCH FROM (end_time - start_time))), 0)::DOUBLE PRECISION   AS p95_latency_seconds
+FROM traces
+WHERE project_id = $3::TEXT
+  AND start_time >= $4::TIMESTAMPTZ
+  AND start_time <  $5::TIMESTAMPTZ
+  AND (NULLIF($6::TEXT, '')     IS NULL OR user_id     = $6::TEXT)
+  AND (NULLIF($7::TEXT, '')  IS NULL OR session_id  = $7::TEXT)
+  AND (NULLIF($8::TEXT, '') IS NULL OR environment = $8::TEXT)
+  AND (cardinality($9::TEXT[]) = 0 OR tags @> $9::TEXT[])
+GROUP BY time_bucket
+ORDER BY time_bucket
+`
+
+type GetTraceMetricsOverTimeParams struct {
+	Bucket      pgtype.Interval    `db:"bucket" json:"bucket"`
+	Origin      pgtype.Timestamptz `db:"origin" json:"origin"`
+	ProjectID   string             `db:"project_id" json:"project_id"`
+	FromTime    pgtype.Timestamptz `db:"from_time" json:"from_time"`
+	ToTime      pgtype.Timestamptz `db:"to_time" json:"to_time"`
+	UserID      string             `db:"user_id" json:"user_id"`
+	SessionID   string             `db:"session_id" json:"session_id"`
+	Environment string             `db:"environment" json:"environment"`
+	Tags        []string           `db:"tags" json:"tags"`
+}
+
+type GetTraceMetricsOverTimeRow struct {
+	TimeBucket        pgtype.Timestamptz `db:"time_bucket" json:"time_bucket"`
+	TraceCount        int64              `db:"trace_count" json:"trace_count"`
+	ErrorCount        int64              `db:"error_count" json:"error_count"`
+	TotalCost         float64            `db:"total_cost" json:"total_cost"`
+	InputTokens       int64              `db:"input_tokens" json:"input_tokens"`
+	OutputTokens      int64              `db:"output_tokens" json:"output_tokens"`
+	TotalTokens       int64              `db:"total_tokens" json:"total_tokens"`
+	AvgLatencySeconds float64            `db:"avg_latency_seconds" json:"avg_latency_seconds"`
+	P95LatencySeconds float64            `db:"p95_latency_seconds" json:"p95_latency_seconds"`
+}
+
+// One row per time bucket. The bucket width is a parameter so an hour-scale
+// range does not collapse into a single daily point.
+func (q *Queries) GetTraceMetricsOverTime(ctx context.Context, arg GetTraceMetricsOverTimeParams) ([]GetTraceMetricsOverTimeRow, error) {
+	rows, err := q.db.Query(ctx, getTraceMetricsOverTime,
+		arg.Bucket,
+		arg.Origin,
+		arg.ProjectID,
+		arg.FromTime,
+		arg.ToTime,
+		arg.UserID,
+		arg.SessionID,
+		arg.Environment,
+		arg.Tags,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetTraceMetricsOverTimeRow{}
+	for rows.Next() {
+		var i GetTraceMetricsOverTimeRow
+		if err := rows.Scan(
+			&i.TimeBucket,
+			&i.TraceCount,
+			&i.ErrorCount,
+			&i.TotalCost,
+			&i.InputTokens,
+			&i.OutputTokens,
+			&i.TotalTokens,
+			&i.AvgLatencySeconds,
+			&i.P95LatencySeconds,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getTraceTokenUsageOverTimeByProjectID = `-- name: GetTraceTokenUsageOverTimeByProjectID :many
@@ -1733,7 +3521,7 @@ func (q *Queries) GetTraceTokenUsageStatsByProjectID(ctx context.Context, projec
 }
 
 const getTraceWithProject = `-- name: GetTraceWithProject :one
-SELECT t.id, t.project_id, t.name, t.input, t.output, t.metadata, t.user_id, t.session_id, t.tags, t.start_time, t.end_time, t.total_cost, t.token_usage, t.created_at, p.name as project_name FROM traces t
+SELECT t.id, t.project_id, t.name, t.input, t.output, t.metadata, t.user_id, t.session_id, t.tags, t.start_time, t.end_time, t.total_cost, t.token_usage, t.created_at, t.release, t.version, t.public, t.bookmarked, t.environment, t.updated_at, p.name as project_name FROM traces t
 JOIN projects p ON p.id = t.project_id
 WHERE t.id = $1
 `
@@ -1742,17 +3530,23 @@ type GetTraceWithProjectRow struct {
 	ID          string             `db:"id" json:"id"`
 	ProjectID   string             `db:"project_id" json:"project_id"`
 	Name        pgtype.Text        `db:"name" json:"name"`
-	Input       []byte             `db:"input" json:"input"`
-	Output      []byte             `db:"output" json:"output"`
-	Metadata    []byte             `db:"metadata" json:"metadata"`
+	Input       json.RawMessage    `db:"input" json:"input"`
+	Output      json.RawMessage    `db:"output" json:"output"`
+	Metadata    json.RawMessage    `db:"metadata" json:"metadata"`
 	UserID      pgtype.Text        `db:"user_id" json:"user_id"`
 	SessionID   pgtype.Text        `db:"session_id" json:"session_id"`
 	Tags        []string           `db:"tags" json:"tags"`
 	StartTime   pgtype.Timestamptz `db:"start_time" json:"start_time"`
 	EndTime     pgtype.Timestamptz `db:"end_time" json:"end_time"`
 	TotalCost   pgtype.Float8      `db:"total_cost" json:"total_cost"`
-	TokenUsage  []byte             `db:"token_usage" json:"token_usage"`
+	TokenUsage  json.RawMessage    `db:"token_usage" json:"token_usage"`
 	CreatedAt   pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	Release     pgtype.Text        `db:"release" json:"release"`
+	Version     pgtype.Text        `db:"version" json:"version"`
+	Public      bool               `db:"public" json:"public"`
+	Bookmarked  bool               `db:"bookmarked" json:"bookmarked"`
+	Environment string             `db:"environment" json:"environment"`
+	UpdatedAt   pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 	ProjectName string             `db:"project_name" json:"project_name"`
 }
 
@@ -1774,13 +3568,19 @@ func (q *Queries) GetTraceWithProject(ctx context.Context, id string) (GetTraceW
 		&i.TotalCost,
 		&i.TokenUsage,
 		&i.CreatedAt,
+		&i.Release,
+		&i.Version,
+		&i.Public,
+		&i.Bookmarked,
+		&i.Environment,
+		&i.UpdatedAt,
 		&i.ProjectName,
 	)
 	return i, err
 }
 
 const getTracesByProjectID = `-- name: GetTracesByProjectID :many
-SELECT id, project_id, name, input, output, metadata, user_id, session_id, tags, start_time, end_time, total_cost, token_usage, created_at FROM traces 
+SELECT id, project_id, name, input, output, metadata, user_id, session_id, tags, start_time, end_time, total_cost, token_usage, created_at, release, version, public, bookmarked, environment, updated_at FROM traces 
 WHERE project_id = $1 
 ORDER BY start_time DESC
 LIMIT $2 OFFSET $3
@@ -1816,6 +3616,12 @@ func (q *Queries) GetTracesByProjectID(ctx context.Context, arg GetTracesByProje
 			&i.TotalCost,
 			&i.TokenUsage,
 			&i.CreatedAt,
+			&i.Release,
+			&i.Version,
+			&i.Public,
+			&i.Bookmarked,
+			&i.Environment,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -1828,7 +3634,7 @@ func (q *Queries) GetTracesByProjectID(ctx context.Context, arg GetTracesByProje
 }
 
 const getTracesByProjectIDAndName = `-- name: GetTracesByProjectIDAndName :many
-SELECT id, project_id, name, input, output, metadata, user_id, session_id, tags, start_time, end_time, total_cost, token_usage, created_at FROM traces 
+SELECT id, project_id, name, input, output, metadata, user_id, session_id, tags, start_time, end_time, total_cost, token_usage, created_at, release, version, public, bookmarked, environment, updated_at FROM traces 
 WHERE project_id = $1 AND name = $2
 ORDER BY start_time DESC
 LIMIT $3 OFFSET $4
@@ -1870,6 +3676,64 @@ func (q *Queries) GetTracesByProjectIDAndName(ctx context.Context, arg GetTraces
 			&i.TotalCost,
 			&i.TokenUsage,
 			&i.CreatedAt,
+			&i.Release,
+			&i.Version,
+			&i.Public,
+			&i.Bookmarked,
+			&i.Environment,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getTracesBySessionID = `-- name: GetTracesBySessionID :many
+SELECT id, project_id, name, input, output, metadata, user_id, session_id, tags, start_time, end_time, total_cost, token_usage, created_at, release, version, public, bookmarked, environment, updated_at FROM traces
+WHERE project_id = $1 AND session_id = $2
+ORDER BY start_time ASC
+`
+
+type GetTracesBySessionIDParams struct {
+	ProjectID string      `db:"project_id" json:"project_id"`
+	SessionID pgtype.Text `db:"session_id" json:"session_id"`
+}
+
+func (q *Queries) GetTracesBySessionID(ctx context.Context, arg GetTracesBySessionIDParams) ([]Trace, error) {
+	rows, err := q.db.Query(ctx, getTracesBySessionID, arg.ProjectID, arg.SessionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Trace{}
+	for rows.Next() {
+		var i Trace
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Name,
+			&i.Input,
+			&i.Output,
+			&i.Metadata,
+			&i.UserID,
+			&i.SessionID,
+			&i.Tags,
+			&i.StartTime,
+			&i.EndTime,
+			&i.TotalCost,
+			&i.TokenUsage,
+			&i.CreatedAt,
+			&i.Release,
+			&i.Version,
+			&i.Public,
+			&i.Bookmarked,
+			&i.Environment,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -1918,14 +3782,602 @@ func (q *Queries) GetUserByID(ctx context.Context, id string) (User, error) {
 	return i, err
 }
 
+const listAuditLogs = `-- name: ListAuditLogs :many
+SELECT id, org_id, project_id, user_id, api_key_id, action, resource, resource_id, ip_address, detail, created_at FROM audit_logs
+WHERE project_id = $3::TEXT
+  AND (NULLIF($4::TEXT, '')   IS NULL OR action   = $4::TEXT)
+  AND (NULLIF($5::TEXT, '') IS NULL OR resource = $5::TEXT)
+ORDER BY created_at DESC
+LIMIT $1 OFFSET $2
+`
+
+type ListAuditLogsParams struct {
+	Limit     int32  `db:"limit" json:"limit"`
+	Offset    int32  `db:"offset" json:"offset"`
+	ProjectID string `db:"project_id" json:"project_id"`
+	Action    string `db:"action" json:"action"`
+	Resource  string `db:"resource" json:"resource"`
+}
+
+func (q *Queries) ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([]AuditLog, error) {
+	rows, err := q.db.Query(ctx, listAuditLogs,
+		arg.Limit,
+		arg.Offset,
+		arg.ProjectID,
+		arg.Action,
+		arg.Resource,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AuditLog{}
+	for rows.Next() {
+		var i AuditLog
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrgID,
+			&i.ProjectID,
+			&i.UserID,
+			&i.ApiKeyID,
+			&i.Action,
+			&i.Resource,
+			&i.ResourceID,
+			&i.IpAddress,
+			&i.Detail,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listModelPrices = `-- name: ListModelPrices :many
+SELECT id, project_id, model_name, match_pattern, unit, input_price, output_price, total_price, currency, created_at FROM model_prices
+WHERE (NULLIF($1::TEXT, '') IS NULL OR project_id = $1::TEXT)
+ORDER BY model_name
+`
+
+func (q *Queries) ListModelPrices(ctx context.Context, projectID string) ([]ModelPrice, error) {
+	rows, err := q.db.Query(ctx, listModelPrices, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ModelPrice{}
+	for rows.Next() {
+		var i ModelPrice
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.ModelName,
+			&i.MatchPattern,
+			&i.Unit,
+			&i.InputPrice,
+			&i.OutputPrice,
+			&i.TotalPrice,
+			&i.Currency,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listModelPricesForProject = `-- name: ListModelPricesForProject :many
+
+SELECT id, project_id, model_name, match_pattern, unit, input_price, output_price, total_price, currency, created_at FROM model_prices
+WHERE project_id = $1::TEXT OR project_id IS NULL
+ORDER BY (project_id IS NULL), length(match_pattern) DESC, model_name
+`
+
+// ===========================================================================
+// Model prices
+// ===========================================================================
+// Project-scoped rows first, so they take precedence over the global defaults.
+func (q *Queries) ListModelPricesForProject(ctx context.Context, projectID string) ([]ModelPrice, error) {
+	rows, err := q.db.Query(ctx, listModelPricesForProject, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ModelPrice{}
+	for rows.Next() {
+		var i ModelPrice
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.ModelName,
+			&i.MatchPattern,
+			&i.Unit,
+			&i.InputPrice,
+			&i.OutputPrice,
+			&i.TotalPrice,
+			&i.Currency,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listObservationsFiltered = `-- name: ListObservationsFiltered :many
+SELECT id, trace_id, type, name, input, output, metadata, model, model_parameters, start_time, end_time, token_usage, cost, status, parent_observation_id, project_id, level, status_message, completion_start_time, prompt_id, prompt_name, prompt_version, usage_details, cost_details, version, environment, created_at FROM observations
+WHERE project_id = $3::TEXT
+  AND (NULLIF($4::TEXT, '') IS NULL OR trace_id = $4::TEXT)
+  AND (NULLIF($5::TEXT, '')     IS NULL OR type     = $5::TEXT)
+  AND (NULLIF($6::TEXT, '')     IS NULL OR name     = $6::TEXT)
+  AND (NULLIF($7::TEXT, '')    IS NULL OR model    = $7::TEXT)
+  AND (NULLIF($8::TEXT, '')    IS NULL OR level    = $8::TEXT)
+  AND ($9::TIMESTAMPTZ IS NULL OR start_time >= $9::TIMESTAMPTZ)
+  AND ($10::TIMESTAMPTZ   IS NULL OR start_time <  $10::TIMESTAMPTZ)
+ORDER BY start_time DESC
+LIMIT $1 OFFSET $2
+`
+
+type ListObservationsFilteredParams struct {
+	Limit     int32              `db:"limit" json:"limit"`
+	Offset    int32              `db:"offset" json:"offset"`
+	ProjectID string             `db:"project_id" json:"project_id"`
+	TraceID   string             `db:"trace_id" json:"trace_id"`
+	Type      string             `db:"type" json:"type"`
+	Name      string             `db:"name" json:"name"`
+	Model     string             `db:"model" json:"model"`
+	Level     string             `db:"level" json:"level"`
+	FromTime  pgtype.Timestamptz `db:"from_time" json:"from_time"`
+	ToTime    pgtype.Timestamptz `db:"to_time" json:"to_time"`
+}
+
+func (q *Queries) ListObservationsFiltered(ctx context.Context, arg ListObservationsFilteredParams) ([]Observation, error) {
+	rows, err := q.db.Query(ctx, listObservationsFiltered,
+		arg.Limit,
+		arg.Offset,
+		arg.ProjectID,
+		arg.TraceID,
+		arg.Type,
+		arg.Name,
+		arg.Model,
+		arg.Level,
+		arg.FromTime,
+		arg.ToTime,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Observation{}
+	for rows.Next() {
+		var i Observation
+		if err := rows.Scan(
+			&i.ID,
+			&i.TraceID,
+			&i.Type,
+			&i.Name,
+			&i.Input,
+			&i.Output,
+			&i.Metadata,
+			&i.Model,
+			&i.ModelParameters,
+			&i.StartTime,
+			&i.EndTime,
+			&i.TokenUsage,
+			&i.Cost,
+			&i.Status,
+			&i.ParentObservationID,
+			&i.ProjectID,
+			&i.Level,
+			&i.StatusMessage,
+			&i.CompletionStartTime,
+			&i.PromptID,
+			&i.PromptName,
+			&i.PromptVersion,
+			&i.UsageDetails,
+			&i.CostDetails,
+			&i.Version,
+			&i.Environment,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPromptNames = `-- name: ListPromptNames :many
+SELECT
+  name,
+  COUNT(*)::BIGINT              AS version_count,
+  MAX(version)::INT             AS latest_version,
+  MAX(created_at)::TIMESTAMPTZ  AS updated_at,
+  COALESCE((
+    SELECT ARRAY_AGG(DISTINCT l)
+    FROM prompts p2, unnest(p2.labels) AS l
+    WHERE p2.project_id = prompts.project_id AND p2.name = prompts.name
+  ), ARRAY[]::TEXT[])::TEXT[]   AS labels
+FROM prompts
+WHERE prompts.project_id = $1
+GROUP BY prompts.project_id, prompts.name
+ORDER BY prompts.name
+`
+
+type ListPromptNamesRow struct {
+	Name          string             `db:"name" json:"name"`
+	VersionCount  int64              `db:"version_count" json:"version_count"`
+	LatestVersion int32              `db:"latest_version" json:"latest_version"`
+	UpdatedAt     pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	Labels        []string           `db:"labels" json:"labels"`
+}
+
+// One row per prompt name, with every label in use across its versions.
+func (q *Queries) ListPromptNames(ctx context.Context, projectID string) ([]ListPromptNamesRow, error) {
+	rows, err := q.db.Query(ctx, listPromptNames, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListPromptNamesRow{}
+	for rows.Next() {
+		var i ListPromptNamesRow
+		if err := rows.Scan(
+			&i.Name,
+			&i.VersionCount,
+			&i.LatestVersion,
+			&i.UpdatedAt,
+			&i.Labels,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listScores = `-- name: ListScores :many
+SELECT id, trace_id, name, value, comment, source, user_id, created_at, project_id, observation_id, session_id, dataset_run_id, data_type, string_value, config_id, metadata, environment FROM scores
+WHERE project_id = $3::TEXT
+  AND (NULLIF($4::TEXT, '')           IS NULL OR name           = $4::TEXT)
+  AND (NULLIF($5::TEXT, '')         IS NULL OR source         = $5::TEXT)
+  AND (NULLIF($6::TEXT, '')       IS NULL OR trace_id       = $6::TEXT)
+  AND (NULLIF($7::TEXT, '') IS NULL OR observation_id = $7::TEXT)
+  AND (NULLIF($8::TEXT, '')      IS NULL OR data_type      = $8::TEXT)
+ORDER BY created_at DESC
+LIMIT $1 OFFSET $2
+`
+
+type ListScoresParams struct {
+	Limit         int32  `db:"limit" json:"limit"`
+	Offset        int32  `db:"offset" json:"offset"`
+	ProjectID     string `db:"project_id" json:"project_id"`
+	Name          string `db:"name" json:"name"`
+	Source        string `db:"source" json:"source"`
+	TraceID       string `db:"trace_id" json:"trace_id"`
+	ObservationID string `db:"observation_id" json:"observation_id"`
+	DataType      string `db:"data_type" json:"data_type"`
+}
+
+func (q *Queries) ListScores(ctx context.Context, arg ListScoresParams) ([]Score, error) {
+	rows, err := q.db.Query(ctx, listScores,
+		arg.Limit,
+		arg.Offset,
+		arg.ProjectID,
+		arg.Name,
+		arg.Source,
+		arg.TraceID,
+		arg.ObservationID,
+		arg.DataType,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Score{}
+	for rows.Next() {
+		var i Score
+		if err := rows.Scan(
+			&i.ID,
+			&i.TraceID,
+			&i.Name,
+			&i.Value,
+			&i.Comment,
+			&i.Source,
+			&i.UserID,
+			&i.CreatedAt,
+			&i.ProjectID,
+			&i.ObservationID,
+			&i.SessionID,
+			&i.DatasetRunID,
+			&i.DataType,
+			&i.StringValue,
+			&i.ConfigID,
+			&i.Metadata,
+			&i.Environment,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSessions = `-- name: ListSessions :many
+SELECT
+  s.id,
+  s.project_id,
+  s.bookmarked,
+  s.public,
+  s.environment,
+  s.created_at,
+  COUNT(t.id)                                       AS trace_count,
+  COALESCE(SUM(t.total_cost), 0)::DOUBLE PRECISION  AS total_cost,
+  MIN(t.start_time)                                 AS first_trace_at,
+  MAX(t.start_time)                                 AS last_trace_at
+FROM sessions s
+LEFT JOIN traces t ON t.session_id = s.id AND t.project_id = s.project_id
+WHERE s.project_id = $3::TEXT
+GROUP BY s.id, s.project_id, s.bookmarked, s.public, s.environment, s.created_at
+ORDER BY s.created_at DESC
+LIMIT $1 OFFSET $2
+`
+
+type ListSessionsParams struct {
+	Limit     int32  `db:"limit" json:"limit"`
+	Offset    int32  `db:"offset" json:"offset"`
+	ProjectID string `db:"project_id" json:"project_id"`
+}
+
+type ListSessionsRow struct {
+	ID           string             `db:"id" json:"id"`
+	ProjectID    string             `db:"project_id" json:"project_id"`
+	Bookmarked   bool               `db:"bookmarked" json:"bookmarked"`
+	Public       bool               `db:"public" json:"public"`
+	Environment  string             `db:"environment" json:"environment"`
+	CreatedAt    pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	TraceCount   int64              `db:"trace_count" json:"trace_count"`
+	TotalCost    float64            `db:"total_cost" json:"total_cost"`
+	FirstTraceAt interface{}        `db:"first_trace_at" json:"first_trace_at"`
+	LastTraceAt  interface{}        `db:"last_trace_at" json:"last_trace_at"`
+}
+
+func (q *Queries) ListSessions(ctx context.Context, arg ListSessionsParams) ([]ListSessionsRow, error) {
+	rows, err := q.db.Query(ctx, listSessions, arg.Limit, arg.Offset, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListSessionsRow{}
+	for rows.Next() {
+		var i ListSessionsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Bookmarked,
+			&i.Public,
+			&i.Environment,
+			&i.CreatedAt,
+			&i.TraceCount,
+			&i.TotalCost,
+			&i.FirstTraceAt,
+			&i.LastTraceAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTracesFiltered = `-- name: ListTracesFiltered :many
+SELECT id, project_id, name, input, output, metadata, user_id, session_id, tags, start_time, end_time, total_cost, token_usage, created_at, release, version, public, bookmarked, environment, updated_at FROM traces
+WHERE project_id = $3::TEXT
+  AND (NULLIF($4::TEXT, '')        IS NULL OR name        = $4::TEXT)
+  AND (NULLIF($5::TEXT, '')     IS NULL OR user_id     = $5::TEXT)
+  AND (NULLIF($6::TEXT, '')  IS NULL OR session_id  = $6::TEXT)
+  AND (NULLIF($7::TEXT, '')     IS NULL OR release     = $7::TEXT)
+  AND (NULLIF($8::TEXT, '')     IS NULL OR version     = $8::TEXT)
+  AND (NULLIF($9::TEXT, '') IS NULL OR environment = $9::TEXT)
+  AND (cardinality($10::TEXT[]) = 0 OR tags @> $10::TEXT[])
+  AND ($11::TIMESTAMPTZ IS NULL OR start_time >= $11::TIMESTAMPTZ)
+  AND ($12::TIMESTAMPTZ   IS NULL OR start_time <  $12::TIMESTAMPTZ)
+ORDER BY start_time DESC
+LIMIT $1 OFFSET $2
+`
+
+type ListTracesFilteredParams struct {
+	Limit       int32              `db:"limit" json:"limit"`
+	Offset      int32              `db:"offset" json:"offset"`
+	ProjectID   string             `db:"project_id" json:"project_id"`
+	Name        string             `db:"name" json:"name"`
+	UserID      string             `db:"user_id" json:"user_id"`
+	SessionID   string             `db:"session_id" json:"session_id"`
+	Release     string             `db:"release" json:"release"`
+	Version     string             `db:"version" json:"version"`
+	Environment string             `db:"environment" json:"environment"`
+	Tags        []string           `db:"tags" json:"tags"`
+	FromTime    pgtype.Timestamptz `db:"from_time" json:"from_time"`
+	ToTime      pgtype.Timestamptz `db:"to_time" json:"to_time"`
+}
+
+func (q *Queries) ListTracesFiltered(ctx context.Context, arg ListTracesFilteredParams) ([]Trace, error) {
+	rows, err := q.db.Query(ctx, listTracesFiltered,
+		arg.Limit,
+		arg.Offset,
+		arg.ProjectID,
+		arg.Name,
+		arg.UserID,
+		arg.SessionID,
+		arg.Release,
+		arg.Version,
+		arg.Environment,
+		arg.Tags,
+		arg.FromTime,
+		arg.ToTime,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Trace{}
+	for rows.Next() {
+		var i Trace
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Name,
+			&i.Input,
+			&i.Output,
+			&i.Metadata,
+			&i.UserID,
+			&i.SessionID,
+			&i.Tags,
+			&i.StartTime,
+			&i.EndTime,
+			&i.TotalCost,
+			&i.TokenUsage,
+			&i.CreatedAt,
+			&i.Release,
+			&i.Version,
+			&i.Public,
+			&i.Bookmarked,
+			&i.Environment,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const recalculateTraceAggregates = `-- name: RecalculateTraceAggregates :exec
+UPDATE traces t SET
+  total_cost = agg.total_cost,
+  token_usage = jsonb_build_object(
+    'input_tokens',  agg.input_tokens,
+    'output_tokens', agg.output_tokens,
+    'total_tokens',  agg.total_tokens
+  ),
+  updated_at = now()
+FROM (
+  SELECT
+    COALESCE(SUM(o.cost), 0)::DOUBLE PRECISION AS total_cost,
+    COALESCE(SUM((o.token_usage->>'input_tokens')::BIGINT), 0)  AS input_tokens,
+    COALESCE(SUM((o.token_usage->>'output_tokens')::BIGINT), 0) AS output_tokens,
+    COALESCE(SUM((o.token_usage->>'total_tokens')::BIGINT), 0)  AS total_tokens
+  FROM observations o
+  WHERE o.trace_id = $1::TEXT
+) agg
+WHERE t.id = $1::TEXT AND t.project_id = $2::TEXT
+`
+
+type RecalculateTraceAggregatesParams struct {
+	TraceID   string `db:"trace_id" json:"trace_id"`
+	ProjectID string `db:"project_id" json:"project_id"`
+}
+
+// Rolls observation cost and token usage up onto the parent trace. Called by
+// the ingestion worker so the write path stays cheap.
+func (q *Queries) RecalculateTraceAggregates(ctx context.Context, arg RecalculateTraceAggregatesParams) error {
+	_, err := q.db.Exec(ctx, recalculateTraceAggregates, arg.TraceID, arg.ProjectID)
+	return err
+}
+
+const removeLabelFromPrompts = `-- name: RemoveLabelFromPrompts :exec
+UPDATE prompts
+SET labels = array_remove(labels, $3::TEXT)
+WHERE project_id = $1 AND name = $2
+`
+
+type RemoveLabelFromPromptsParams struct {
+	ProjectID string `db:"project_id" json:"project_id"`
+	Name      string `db:"name" json:"name"`
+	Label     string `db:"label" json:"label"`
+}
+
+func (q *Queries) RemoveLabelFromPrompts(ctx context.Context, arg RemoveLabelFromPromptsParams) error {
+	_, err := q.db.Exec(ctx, removeLabelFromPrompts, arg.ProjectID, arg.Name, arg.Label)
+	return err
+}
+
+const syncPromptActiveFromLabels = `-- name: SyncPromptActiveFromLabels :exec
+UPDATE prompts
+SET is_active = ('production' = ANY(labels))
+WHERE project_id = $1 AND name = $2
+`
+
+type SyncPromptActiveFromLabelsParams struct {
+	ProjectID string `db:"project_id" json:"project_id"`
+	Name      string `db:"name" json:"name"`
+}
+
+// Keeps the original is_active boolean consistent with the production label,
+// so clients written against the pre-label API keep working.
+func (q *Queries) SyncPromptActiveFromLabels(ctx context.Context, arg SyncPromptActiveFromLabelsParams) error {
+	_, err := q.db.Exec(ctx, syncPromptActiveFromLabels, arg.ProjectID, arg.Name)
+	return err
+}
+
+const touchAPIKey = `-- name: TouchAPIKey :exec
+UPDATE api_keys SET last_used_at = now() WHERE id = $1
+`
+
+func (q *Queries) TouchAPIKey(ctx context.Context, id string) error {
+	_, err := q.db.Exec(ctx, touchAPIKey, id)
+	return err
+}
+
+const updateDatasetItemStatus = `-- name: UpdateDatasetItemStatus :exec
+UPDATE dataset_items SET status = $2::TEXT WHERE id = $1
+`
+
+type UpdateDatasetItemStatusParams struct {
+	ID     string `db:"id" json:"id"`
+	Status string `db:"status" json:"status"`
+}
+
+func (q *Queries) UpdateDatasetItemStatus(ctx context.Context, arg UpdateDatasetItemStatusParams) error {
+	_, err := q.db.Exec(ctx, updateDatasetItemStatus, arg.ID, arg.Status)
+	return err
+}
+
 const updateEvaluationRunStatus = `-- name: UpdateEvaluationRunStatus :exec
 UPDATE evaluation_runs SET status = $2, result_summary = $3 WHERE id = $1
 `
 
 type UpdateEvaluationRunStatusParams struct {
-	ID            string `db:"id" json:"id"`
-	Status        string `db:"status" json:"status"`
-	ResultSummary []byte `db:"result_summary" json:"result_summary"`
+	ID            string          `db:"id" json:"id"`
+	Status        string          `db:"status" json:"status"`
+	ResultSummary json.RawMessage `db:"result_summary" json:"result_summary"`
 }
 
 func (q *Queries) UpdateEvaluationRunStatus(ctx context.Context, arg UpdateEvaluationRunStatusParams) error {
@@ -1943,11 +4395,11 @@ WHERE id = $1
 `
 
 type UpdateEvaluatorConfigParams struct {
-	ID          string      `db:"id" json:"id"`
-	Name        string      `db:"name" json:"name"`
-	Description pgtype.Text `db:"description" json:"description"`
-	Config      []byte      `db:"config" json:"config"`
-	IsActive    bool        `db:"is_active" json:"is_active"`
+	ID          string          `db:"id" json:"id"`
+	Name        string          `db:"name" json:"name"`
+	Description pgtype.Text     `db:"description" json:"description"`
+	Config      json.RawMessage `db:"config" json:"config"`
+	IsActive    bool            `db:"is_active" json:"is_active"`
 }
 
 func (q *Queries) UpdateEvaluatorConfig(ctx context.Context, arg UpdateEvaluatorConfigParams) error {
@@ -1973,6 +4425,30 @@ type UpdateMemberRoleParams struct {
 
 func (q *Queries) UpdateMemberRole(ctx context.Context, arg UpdateMemberRoleParams) error {
 	_, err := q.db.Exec(ctx, updateMemberRole, arg.UserID, arg.OrgID, arg.Role)
+	return err
+}
+
+const updateObservationCost = `-- name: UpdateObservationCost :exec
+UPDATE observations
+SET cost = $3::DOUBLE PRECISION,
+    cost_details = $4
+WHERE id = $1 AND project_id = $2
+`
+
+type UpdateObservationCostParams struct {
+	ID          string          `db:"id" json:"id"`
+	ProjectID   string          `db:"project_id" json:"project_id"`
+	Cost        pgtype.Float8   `db:"cost" json:"cost"`
+	CostDetails json.RawMessage `db:"cost_details" json:"cost_details"`
+}
+
+func (q *Queries) UpdateObservationCost(ctx context.Context, arg UpdateObservationCostParams) error {
+	_, err := q.db.Exec(ctx, updateObservationCost,
+		arg.ID,
+		arg.ProjectID,
+		arg.Cost,
+		arg.CostDetails,
+	)
 	return err
 }
 
@@ -2022,18 +4498,18 @@ SET name = COALESCE($2, name),
     total_cost = COALESCE($7, total_cost),
     token_usage = COALESCE($8, token_usage)
 WHERE id = $1
-RETURNING id, project_id, name, input, output, metadata, user_id, session_id, tags, start_time, end_time, total_cost, token_usage, created_at
+RETURNING id, project_id, name, input, output, metadata, user_id, session_id, tags, start_time, end_time, total_cost, token_usage, created_at, release, version, public, bookmarked, environment, updated_at
 `
 
 type UpdateTraceParams struct {
 	ID         string             `db:"id" json:"id"`
 	Name       pgtype.Text        `db:"name" json:"name"`
-	Input      []byte             `db:"input" json:"input"`
-	Output     []byte             `db:"output" json:"output"`
-	Metadata   []byte             `db:"metadata" json:"metadata"`
+	Input      json.RawMessage    `db:"input" json:"input"`
+	Output     json.RawMessage    `db:"output" json:"output"`
+	Metadata   json.RawMessage    `db:"metadata" json:"metadata"`
 	EndTime    pgtype.Timestamptz `db:"end_time" json:"end_time"`
 	TotalCost  pgtype.Float8      `db:"total_cost" json:"total_cost"`
-	TokenUsage []byte             `db:"token_usage" json:"token_usage"`
+	TokenUsage json.RawMessage    `db:"token_usage" json:"token_usage"`
 }
 
 func (q *Queries) UpdateTrace(ctx context.Context, arg UpdateTraceParams) (Trace, error) {
@@ -2063,6 +4539,12 @@ func (q *Queries) UpdateTrace(ctx context.Context, arg UpdateTraceParams) (Trace
 		&i.TotalCost,
 		&i.TokenUsage,
 		&i.CreatedAt,
+		&i.Release,
+		&i.Version,
+		&i.Public,
+		&i.Bookmarked,
+		&i.Environment,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -2079,4 +4561,277 @@ type UpdateUserNameParams struct {
 func (q *Queries) UpdateUserName(ctx context.Context, arg UpdateUserNameParams) error {
 	_, err := q.db.Exec(ctx, updateUserName, arg.ID, arg.Name)
 	return err
+}
+
+const upsertObservation = `-- name: UpsertObservation :one
+
+INSERT INTO observations (
+  id, trace_id, project_id, type, name, input, output, metadata, model,
+  model_parameters, start_time, end_time, completion_start_time, token_usage,
+  usage_details, cost_details, cost, status, level, status_message,
+  parent_observation_id, prompt_id, prompt_name, prompt_version, version, environment
+)
+VALUES (
+  COALESCE(NULLIF($1::TEXT, ''), gen_random_uuid()::TEXT),
+  $2::TEXT, $3::TEXT, $4::TEXT,
+  NULLIF($5::TEXT, ''), $6, $7, $8,
+  NULLIF($9::TEXT, ''), $10,
+  $11,
+  $12::TIMESTAMPTZ,
+  $13::TIMESTAMPTZ,
+  $14, $15, $16,
+  $17::DOUBLE PRECISION,
+  $18::TEXT, $19::TEXT, NULLIF($20::TEXT, ''),
+  NULLIF($21::TEXT, ''),
+  NULLIF($22::TEXT, ''), NULLIF($23::TEXT, ''),
+  $24::INT,
+  NULLIF($25::TEXT, ''), $26::TEXT
+)
+ON CONFLICT (id) DO UPDATE SET
+  name                  = COALESCE(EXCLUDED.name, observations.name),
+  type                  = EXCLUDED.type,
+  input                 = COALESCE(EXCLUDED.input, observations.input),
+  output                = COALESCE(EXCLUDED.output, observations.output),
+  metadata              = COALESCE(EXCLUDED.metadata, observations.metadata),
+  model                 = COALESCE(EXCLUDED.model, observations.model),
+  model_parameters      = COALESCE(EXCLUDED.model_parameters, observations.model_parameters),
+  end_time              = COALESCE(EXCLUDED.end_time, observations.end_time),
+  completion_start_time = COALESCE(EXCLUDED.completion_start_time, observations.completion_start_time),
+  token_usage           = COALESCE(EXCLUDED.token_usage, observations.token_usage),
+  usage_details         = COALESCE(EXCLUDED.usage_details, observations.usage_details),
+  cost_details          = COALESCE(EXCLUDED.cost_details, observations.cost_details),
+  cost                  = COALESCE(EXCLUDED.cost, observations.cost),
+  status                = EXCLUDED.status,
+  level                 = EXCLUDED.level,
+  status_message        = COALESCE(EXCLUDED.status_message, observations.status_message),
+  parent_observation_id = COALESCE(EXCLUDED.parent_observation_id, observations.parent_observation_id),
+  prompt_id             = COALESCE(EXCLUDED.prompt_id, observations.prompt_id),
+  prompt_name           = COALESCE(EXCLUDED.prompt_name, observations.prompt_name),
+  prompt_version        = COALESCE(EXCLUDED.prompt_version, observations.prompt_version)
+WHERE observations.project_id = EXCLUDED.project_id
+RETURNING id, trace_id, type, name, input, output, metadata, model, model_parameters, start_time, end_time, token_usage, cost, status, parent_observation_id, project_id, level, status_message, completion_start_time, prompt_id, prompt_name, prompt_version, usage_details, cost_details, version, environment, created_at
+`
+
+type UpsertObservationParams struct {
+	ID                  string             `db:"id" json:"id"`
+	TraceID             string             `db:"trace_id" json:"trace_id"`
+	ProjectID           string             `db:"project_id" json:"project_id"`
+	Type                string             `db:"type" json:"type"`
+	Name                string             `db:"name" json:"name"`
+	Input               json.RawMessage    `db:"input" json:"input"`
+	Output              json.RawMessage    `db:"output" json:"output"`
+	Metadata            json.RawMessage    `db:"metadata" json:"metadata"`
+	Model               string             `db:"model" json:"model"`
+	ModelParameters     json.RawMessage    `db:"model_parameters" json:"model_parameters"`
+	StartTime           pgtype.Timestamptz `db:"start_time" json:"start_time"`
+	EndTime             pgtype.Timestamptz `db:"end_time" json:"end_time"`
+	CompletionStartTime pgtype.Timestamptz `db:"completion_start_time" json:"completion_start_time"`
+	TokenUsage          json.RawMessage    `db:"token_usage" json:"token_usage"`
+	UsageDetails        json.RawMessage    `db:"usage_details" json:"usage_details"`
+	CostDetails         json.RawMessage    `db:"cost_details" json:"cost_details"`
+	Cost                pgtype.Float8      `db:"cost" json:"cost"`
+	Status              string             `db:"status" json:"status"`
+	Level               string             `db:"level" json:"level"`
+	StatusMessage       string             `db:"status_message" json:"status_message"`
+	ParentObservationID string             `db:"parent_observation_id" json:"parent_observation_id"`
+	PromptID            string             `db:"prompt_id" json:"prompt_id"`
+	PromptName          string             `db:"prompt_name" json:"prompt_name"`
+	PromptVersion       pgtype.Int4        `db:"prompt_version" json:"prompt_version"`
+	Version             string             `db:"version" json:"version"`
+	Environment         string             `db:"environment" json:"environment"`
+}
+
+// ===========================================================================
+// Observations — upsert and project-scoped reads
+// ===========================================================================
+// Honours a client-supplied id so that parentObservationId links resolve and
+// the create-then-update span lifecycle works.
+func (q *Queries) UpsertObservation(ctx context.Context, arg UpsertObservationParams) (Observation, error) {
+	row := q.db.QueryRow(ctx, upsertObservation,
+		arg.ID,
+		arg.TraceID,
+		arg.ProjectID,
+		arg.Type,
+		arg.Name,
+		arg.Input,
+		arg.Output,
+		arg.Metadata,
+		arg.Model,
+		arg.ModelParameters,
+		arg.StartTime,
+		arg.EndTime,
+		arg.CompletionStartTime,
+		arg.TokenUsage,
+		arg.UsageDetails,
+		arg.CostDetails,
+		arg.Cost,
+		arg.Status,
+		arg.Level,
+		arg.StatusMessage,
+		arg.ParentObservationID,
+		arg.PromptID,
+		arg.PromptName,
+		arg.PromptVersion,
+		arg.Version,
+		arg.Environment,
+	)
+	var i Observation
+	err := row.Scan(
+		&i.ID,
+		&i.TraceID,
+		&i.Type,
+		&i.Name,
+		&i.Input,
+		&i.Output,
+		&i.Metadata,
+		&i.Model,
+		&i.ModelParameters,
+		&i.StartTime,
+		&i.EndTime,
+		&i.TokenUsage,
+		&i.Cost,
+		&i.Status,
+		&i.ParentObservationID,
+		&i.ProjectID,
+		&i.Level,
+		&i.StatusMessage,
+		&i.CompletionStartTime,
+		&i.PromptID,
+		&i.PromptName,
+		&i.PromptVersion,
+		&i.UsageDetails,
+		&i.CostDetails,
+		&i.Version,
+		&i.Environment,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const upsertSession = `-- name: UpsertSession :exec
+
+INSERT INTO sessions (id, project_id, environment)
+VALUES ($1::TEXT, $2::TEXT, $3::TEXT)
+ON CONFLICT (project_id, id) DO NOTHING
+`
+
+type UpsertSessionParams struct {
+	ID          string `db:"id" json:"id"`
+	ProjectID   string `db:"project_id" json:"project_id"`
+	Environment string `db:"environment" json:"environment"`
+}
+
+// ===========================================================================
+// Sessions
+// ===========================================================================
+func (q *Queries) UpsertSession(ctx context.Context, arg UpsertSessionParams) error {
+	_, err := q.db.Exec(ctx, upsertSession, arg.ID, arg.ProjectID, arg.Environment)
+	return err
+}
+
+const upsertTrace = `-- name: UpsertTrace :one
+
+INSERT INTO traces (
+  id, project_id, name, input, output, metadata, user_id, session_id, tags,
+  start_time, end_time, total_cost, token_usage, release, version, public,
+  bookmarked, environment
+)
+VALUES (
+  $1::TEXT, $2::TEXT,
+  NULLIF($3::TEXT, ''), $4, $5, $6,
+  NULLIF($7::TEXT, ''), NULLIF($8::TEXT, ''), $9::TEXT[],
+  $10, $11::TIMESTAMPTZ,
+  $12::DOUBLE PRECISION, $13,
+  NULLIF($14::TEXT, ''), NULLIF($15::TEXT, ''),
+  $16::BOOLEAN, $17::BOOLEAN, $18::TEXT
+)
+ON CONFLICT (id) DO UPDATE SET
+  name        = COALESCE(EXCLUDED.name, traces.name),
+  input       = COALESCE(EXCLUDED.input, traces.input),
+  output      = COALESCE(EXCLUDED.output, traces.output),
+  metadata    = COALESCE(EXCLUDED.metadata, traces.metadata),
+  user_id     = COALESCE(EXCLUDED.user_id, traces.user_id),
+  session_id  = COALESCE(EXCLUDED.session_id, traces.session_id),
+  tags        = CASE WHEN cardinality(EXCLUDED.tags) > 0 THEN EXCLUDED.tags ELSE traces.tags END,
+  end_time    = COALESCE(EXCLUDED.end_time, traces.end_time),
+  total_cost  = COALESCE(EXCLUDED.total_cost, traces.total_cost),
+  token_usage = COALESCE(EXCLUDED.token_usage, traces.token_usage),
+  release     = COALESCE(EXCLUDED.release, traces.release),
+  version     = COALESCE(EXCLUDED.version, traces.version),
+  updated_at  = now()
+WHERE traces.project_id = EXCLUDED.project_id
+RETURNING id, project_id, name, input, output, metadata, user_id, session_id, tags, start_time, end_time, total_cost, token_usage, created_at, release, version, public, bookmarked, environment, updated_at
+`
+
+type UpsertTraceParams struct {
+	ID          string             `db:"id" json:"id"`
+	ProjectID   string             `db:"project_id" json:"project_id"`
+	Name        string             `db:"name" json:"name"`
+	Input       json.RawMessage    `db:"input" json:"input"`
+	Output      json.RawMessage    `db:"output" json:"output"`
+	Metadata    json.RawMessage    `db:"metadata" json:"metadata"`
+	UserID      string             `db:"user_id" json:"user_id"`
+	SessionID   string             `db:"session_id" json:"session_id"`
+	Tags        []string           `db:"tags" json:"tags"`
+	StartTime   pgtype.Timestamptz `db:"start_time" json:"start_time"`
+	EndTime     pgtype.Timestamptz `db:"end_time" json:"end_time"`
+	TotalCost   pgtype.Float8      `db:"total_cost" json:"total_cost"`
+	TokenUsage  json.RawMessage    `db:"token_usage" json:"token_usage"`
+	Release     string             `db:"release" json:"release"`
+	Version     string             `db:"version" json:"version"`
+	Public      bool               `db:"public" json:"public"`
+	Bookmarked  bool               `db:"bookmarked" json:"bookmarked"`
+	Environment string             `db:"environment" json:"environment"`
+}
+
+// ===========================================================================
+// Traces — upsert and project-scoped reads
+// ===========================================================================
+// Creates a trace, or merges non-empty fields into an existing one. Ingestion
+// is retried and reordered by SDKs, so this must be idempotent.
+func (q *Queries) UpsertTrace(ctx context.Context, arg UpsertTraceParams) (Trace, error) {
+	row := q.db.QueryRow(ctx, upsertTrace,
+		arg.ID,
+		arg.ProjectID,
+		arg.Name,
+		arg.Input,
+		arg.Output,
+		arg.Metadata,
+		arg.UserID,
+		arg.SessionID,
+		arg.Tags,
+		arg.StartTime,
+		arg.EndTime,
+		arg.TotalCost,
+		arg.TokenUsage,
+		arg.Release,
+		arg.Version,
+		arg.Public,
+		arg.Bookmarked,
+		arg.Environment,
+	)
+	var i Trace
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Input,
+		&i.Output,
+		&i.Metadata,
+		&i.UserID,
+		&i.SessionID,
+		&i.Tags,
+		&i.StartTime,
+		&i.EndTime,
+		&i.TotalCost,
+		&i.TokenUsage,
+		&i.CreatedAt,
+		&i.Release,
+		&i.Version,
+		&i.Public,
+		&i.Bookmarked,
+		&i.Environment,
+		&i.UpdatedAt,
+	)
+	return i, err
 }

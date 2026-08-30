@@ -5,36 +5,49 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
-	"regexp"
+	"net/http"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/langfuse-light/langfuse-light/internal/db"
+	"github.com/langfuse-light/langfuse-light/internal/services/evaluator"
 )
 
-// Evaluator evaluates a trace and returns a score.
-type Evaluator interface {
-	Evaluate(ctx context.Context, trace db.Trace, observations []db.Observation) (float64, string, error)
-}
+// maxTracesPerRun bounds a single evaluation run so one request cannot occupy
+// the process indefinitely, which matters most for network-backed evaluators.
+const maxTracesPerRun = 500
 
 // EvaluatorConfigService handles evaluator configuration and runs.
 type EvaluatorConfigService struct {
 	queries *db.Queries
+	deps    evaluator.Deps
 }
 
-// NewEvaluatorConfigService creates a new evaluator config service.
-func NewEvaluatorConfigService(queries *db.Queries) *EvaluatorConfigService {
-	return &EvaluatorConfigService{queries: queries}
+// NewEvaluatorConfigService creates a new evaluator config service. The timeout
+// bounds each outbound call made by network-backed evaluators.
+func NewEvaluatorConfigService(queries *db.Queries, timeout time.Duration) *EvaluatorConfigService {
+	return &EvaluatorConfigService{
+		queries: queries,
+		deps:    evaluator.Deps{HTTPClient: evaluator.DefaultHTTPClient(timeout)},
+	}
 }
 
-// EvaluatorType represents the type of evaluator.
+// EvaluatorType is the stored evaluator kind. It is the registered evaluator's
+// name; CODE and LLM_JUDGE are retained from before evaluators were named.
 type EvaluatorType string
 
 const (
 	EvaluatorTypeCode     EvaluatorType = "CODE"
 	EvaluatorTypeLLMJudge EvaluatorType = "LLM_JUDGE"
 )
+
+// AvailableEvaluators returns every registered evaluator with its description.
+func AvailableEvaluators() []evaluator.Descriptor {
+	return evaluator.Descriptors()
+}
 
 // CreateEvaluatorConfigRequest is the request body for creating an evaluator config.
 type CreateEvaluatorConfigRequest struct {
@@ -44,7 +57,9 @@ type CreateEvaluatorConfigRequest struct {
 	Config      json.RawMessage `json:"config"`
 }
 
-// CreateEvaluatorConfig creates a new evaluator configuration.
+// CreateEvaluatorConfig creates a new evaluator configuration. The evaluator is
+// built once here so an invalid configuration is rejected on write rather than
+// silently scoring zero at run time.
 func (s *EvaluatorConfigService) CreateEvaluatorConfig(ctx context.Context, projectID string, req CreateEvaluatorConfigRequest) (db.EvaluatorConfig, error) {
 	if req.Name == "" {
 		return db.EvaluatorConfig{}, fmt.Errorf("name is required")
@@ -54,6 +69,10 @@ func (s *EvaluatorConfigService) CreateEvaluatorConfig(ctx context.Context, proj
 	}
 	if req.Config == nil {
 		req.Config = json.RawMessage("{}")
+	}
+
+	if _, err := s.buildEvaluator(string(req.Type), req.Config); err != nil {
+		return db.EvaluatorConfig{}, err
 	}
 
 	config, err := s.queries.CreateEvaluatorConfig(ctx, db.CreateEvaluatorConfigParams{
@@ -80,18 +99,25 @@ func (s *EvaluatorConfigService) ListEvaluatorConfigs(ctx context.Context, proje
 	return configs, nil
 }
 
-// GetEvaluatorConfig returns an evaluator config by ID.
-func (s *EvaluatorConfigService) GetEvaluatorConfig(ctx context.Context, id string) (db.EvaluatorConfig, error) {
-	config, err := s.queries.GetEvaluatorConfigByID(ctx, id)
+// GetEvaluatorConfig returns an evaluator config by ID, scoped to a project.
+func (s *EvaluatorConfigService) GetEvaluatorConfig(ctx context.Context, projectID, id string) (db.EvaluatorConfig, error) {
+	config, err := s.queries.GetEvaluatorConfigByIDAndProject(ctx, db.GetEvaluatorConfigByIDAndProjectParams{
+		ID:        id,
+		ProjectID: projectID,
+	})
 	if err != nil {
 		return db.EvaluatorConfig{}, fmt.Errorf("getting evaluator config: %w", err)
 	}
 	return config, nil
 }
 
-// DeleteEvaluatorConfig deletes an evaluator config by ID.
-func (s *EvaluatorConfigService) DeleteEvaluatorConfig(ctx context.Context, id string) error {
-	if err := s.queries.DeleteEvaluatorConfig(ctx, id); err != nil {
+// DeleteEvaluatorConfig deletes an evaluator config, scoped to a project.
+func (s *EvaluatorConfigService) DeleteEvaluatorConfig(ctx context.Context, projectID, id string) error {
+	err := s.queries.DeleteEvaluatorConfig(ctx, db.DeleteEvaluatorConfigParams{
+		ID:        id,
+		ProjectID: projectID,
+	})
+	if err != nil {
 		return fmt.Errorf("deleting evaluator config: %w", err)
 	}
 	return nil
@@ -104,19 +130,32 @@ type EvaluateTracesRequest struct {
 
 // EvaluationResult represents the result of evaluating a single trace.
 type EvaluationResult struct {
-	TraceID string  `json:"trace_id"`
-	Score   float64 `json:"score"`
-	Reason  string  `json:"reason"`
+	TraceID     string  `json:"trace_id"`
+	Score       float64 `json:"score"`
+	StringValue string  `json:"string_value,omitempty"`
+	DataType    string  `json:"data_type"`
+	Reason      string  `json:"reason"`
+	Error       string  `json:"error,omitempty"`
 }
 
-// EvaluateTraces runs an evaluator against the specified traces and creates scores.
-func (s *EvaluatorConfigService) EvaluateTraces(ctx context.Context, evaluatorID string, req EvaluateTracesRequest) (db.EvaluationRun, error) {
-	config, err := s.queries.GetEvaluatorConfigByID(ctx, evaluatorID)
+// EvaluateTraces runs an evaluator against the given traces and stores a score
+// per trace. The run row records the outcome so partial failures are visible.
+func (s *EvaluatorConfigService) EvaluateTraces(ctx context.Context, projectID, evaluatorID string, req EvaluateTracesRequest) (db.EvaluationRun, []EvaluationResult, error) {
+	config, err := s.queries.GetEvaluatorConfigByIDAndProject(ctx, db.GetEvaluatorConfigByIDAndProjectParams{
+		ID:        evaluatorID,
+		ProjectID: projectID,
+	})
 	if err != nil {
-		return db.EvaluationRun{}, fmt.Errorf("getting evaluator config: %w", err)
+		return db.EvaluationRun{}, nil, fmt.Errorf("getting evaluator config: %w", err)
 	}
 
-	// Create the evaluation run
+	if len(req.TraceIDs) == 0 {
+		return db.EvaluationRun{}, nil, fmt.Errorf("trace_ids must not be empty")
+	}
+	if len(req.TraceIDs) > maxTracesPerRun {
+		return db.EvaluationRun{}, nil, fmt.Errorf("at most %d traces can be evaluated per run", maxTracesPerRun)
+	}
+
 	run, err := s.queries.CreateEvaluationRun(ctx, db.CreateEvaluationRunParams{
 		ProjectID:         config.ProjectID,
 		EvaluatorConfigID: evaluatorID,
@@ -124,82 +163,117 @@ func (s *EvaluatorConfigService) EvaluateTraces(ctx context.Context, evaluatorID
 		Status:            "RUNNING",
 	})
 	if err != nil {
-		return db.EvaluationRun{}, fmt.Errorf("creating evaluation run: %w", err)
+		return db.EvaluationRun{}, nil, fmt.Errorf("creating evaluation run: %w", err)
 	}
 
-	evaluator, err := buildEvaluator(config.Type, config.Config)
+	impl, err := s.buildEvaluator(config.Type, config.Config)
 	if err != nil {
-		s.queries.UpdateEvaluationRunStatus(ctx, db.UpdateEvaluationRunStatusParams{
-			ID:     run.ID,
-			Status: "FAILED",
-		})
-		return run, fmt.Errorf("building evaluator: %w", err)
+		s.finishRun(ctx, run.ID, "FAILED", map[string]interface{}{"error": err.Error()})
+		run.Status = "FAILED"
+		return run, nil, fmt.Errorf("building evaluator: %w", err)
 	}
 
-	var results []EvaluationResult
+	results := make([]EvaluationResult, 0, len(req.TraceIDs))
 	successCount := 0
 	failCount := 0
 
 	for _, traceID := range req.TraceIDs {
-		trace, err := s.queries.GetTraceByID(ctx, traceID)
+		result, err := s.evaluateOne(ctx, projectID, config, impl, traceID)
 		if err != nil {
 			failCount++
+			results = append(results, EvaluationResult{TraceID: traceID, Error: err.Error()})
 			continue
 		}
-
-		observations, err := s.queries.GetObservationsByTraceID(ctx, traceID)
-		if err != nil {
-			observations = nil
-		}
-
-		score, reason, err := evaluator.Evaluate(ctx, trace, observations)
-		if err != nil {
-			failCount++
-			continue
-		}
-
-		// Create score in DB
-		_, err = s.queries.CreateScore(ctx, db.CreateScoreParams{
-			TraceID: traceID,
-			Name:    config.Name,
-			Value:   pgtype.Float8{Float64: score, Valid: true},
-			Comment: pgtype.Text{String: reason, Valid: reason != ""},
-			Source:  "EVALUATOR",
-		})
-		if err != nil {
-			failCount++
-			continue
-		}
-
-		results = append(results, EvaluationResult{
-			TraceID: traceID,
-			Score:   score,
-			Reason:  reason,
-		})
 		successCount++
+		results = append(results, result)
 	}
 
-	summary := map[string]interface{}{
+	status := "COMPLETED"
+	if successCount == 0 {
+		status = "FAILED"
+	}
+	s.finishRun(ctx, run.ID, status, map[string]interface{}{
 		"total":     len(req.TraceIDs),
 		"success":   successCount,
 		"failed":    failCount,
 		"avg_score": avgScore(results),
-	}
-	summaryJSON, _ := json.Marshal(summary)
-
-	finalStatus := "COMPLETED"
-	if failCount == len(req.TraceIDs) {
-		finalStatus = "FAILED"
-	}
-
-	s.queries.UpdateEvaluationRunStatus(ctx, db.UpdateEvaluationRunStatusParams{
-		ID:            run.ID,
-		Status:        finalStatus,
-		ResultSummary: summaryJSON,
 	})
 
-	run.Status = finalStatus
-	return run, nil
+	run.Status = status
+	return run, results, nil
+}
+
+// evaluateOne scores a single trace and records the score.
+func (s *EvaluatorConfigService) evaluateOne(
+	ctx context.Context,
+	projectID string,
+	config db.EvaluatorConfig,
+	impl evaluator.Evaluator,
+	traceID string,
+) (EvaluationResult, error) {
+	trace, err := s.queries.GetTraceByIDAndProject(ctx, db.GetTraceByIDAndProjectParams{
+		ID:        traceID,
+		ProjectID: projectID,
+	})
+	if err != nil {
+		return EvaluationResult{}, fmt.Errorf("loading trace: %w", err)
+	}
+
+	observations, err := s.queries.GetObservationsByTraceIDAndProject(ctx, db.GetObservationsByTraceIDAndProjectParams{
+		TraceID:   traceID,
+		ProjectID: projectID,
+	})
+	if err != nil {
+		observations = nil
+	}
+
+	outcome, err := impl.Evaluate(ctx, BuildTarget(trace, observations, ""))
+	if err != nil {
+		return EvaluationResult{}, err
+	}
+
+	value := pgtype.Float8{Float64: outcome.Score, Valid: true}
+	if outcome.DataType == evaluator.DataTypeCategorical && outcome.StringValue != "" {
+		value = pgtype.Float8{}
+	}
+
+	_, err = s.queries.CreateScore(ctx, db.CreateScoreParams{
+		ProjectID:   projectID,
+		TraceID:     traceID,
+		Name:        config.Name,
+		Value:       value,
+		StringValue: outcome.StringValue,
+		DataType:    outcome.DataType,
+		Comment:     outcome.Reason,
+		Source:      "EVALUATOR",
+	})
+	if err != nil {
+		return EvaluationResult{}, fmt.Errorf("recording score: %w", err)
+	}
+
+	return EvaluationResult{
+		TraceID:     traceID,
+		Score:       outcome.Score,
+		StringValue: outcome.StringValue,
+		DataType:    outcome.DataType,
+		Reason:      outcome.Reason,
+	}, nil
+}
+
+// finishRun records a run's terminal status and summary.
+func (s *EvaluatorConfigService) finishRun(ctx context.Context, runID, status string, summary map[string]interface{}) {
+	encoded, err := json.Marshal(summary)
+	if err != nil {
+		encoded = nil
+	}
+	if err := s.queries.UpdateEvaluationRunStatus(ctx, db.UpdateEvaluationRunStatusParams{
+		ID:            runID,
+		Status:        status,
+		ResultSummary: encoded,
+	}); err != nil {
+		// The scores are already written; a failed status update must not lose them.
+		return
+	}
 }
 
 // ListEvaluationRuns returns all evaluation runs for a project.
@@ -211,250 +285,183 @@ func (s *EvaluatorConfigService) ListEvaluationRuns(ctx context.Context, project
 	return runs, nil
 }
 
-// GetEvaluationRun returns an evaluation run by ID.
-func (s *EvaluatorConfigService) GetEvaluationRun(ctx context.Context, id string) (db.EvaluationRun, error) {
-	run, err := s.queries.GetEvaluationRunByID(ctx, id)
+// GetEvaluationRun returns an evaluation run by ID, scoped to a project.
+func (s *EvaluatorConfigService) GetEvaluationRun(ctx context.Context, projectID, id string) (db.EvaluationRun, error) {
+	run, err := s.queries.GetEvaluationRunByIDAndProject(ctx, db.GetEvaluationRunByIDAndProjectParams{
+		ID:        id,
+		ProjectID: projectID,
+	})
 	if err != nil {
 		return db.EvaluationRun{}, fmt.Errorf("getting evaluation run: %w", err)
 	}
 	return run, nil
 }
 
-func avgScore(results []EvaluationResult) float64 {
-	if len(results) == 0 {
-		return 0
-	}
-	sum := 0.0
-	for _, r := range results {
-		sum += r.Score
-	}
-	return math.Round(sum/float64(len(results))*1000) / 1000
+// BuildEvaluator constructs an evaluator from a stored type and configuration.
+// It is exported so the experiment runner can score dataset items with the same
+// evaluators used for traces.
+func (s *EvaluatorConfigService) BuildEvaluator(evalType string, config json.RawMessage) (evaluator.Evaluator, error) {
+	return s.buildEvaluator(evalType, config)
 }
 
-// BuildEvaluatorForTest creates an evaluator from type and config (exported for testing).
-func BuildEvaluatorForTest(evalType string, config json.RawMessage) (Evaluator, error) {
-	return buildEvaluator(evalType, config)
-}
-
-func buildEvaluator(evalType string, config json.RawMessage) (Evaluator, error) {
-	switch EvaluatorType(evalType) {
-	case EvaluatorTypeCode:
-		return buildCodeEvaluator(config)
-	case EvaluatorTypeLLMJudge:
-		return buildLLMJudgeEvaluator(config)
-	default:
-		return nil, fmt.Errorf("unknown evaluator type: %s", evalType)
-	}
-}
-
-// Code evaluator types
-type lengthCheckConfig struct {
-	MinLength int    `json:"min_length"`
-	MaxLength int    `json:"max_length"`
-	Field     string `json:"field"` // "input" or "output"
-}
-
-type keywordCheckConfig struct {
-	Keywords []string `json:"keywords"`
-	Field    string   `json:"field"`
-	Mode     string   `json:"mode"` // "contains" or "not_contains"
-}
-
-type regexCheckConfig struct {
-	Pattern string `json:"pattern"`
-	Field   string `json:"field"`
-}
-
-type numericRangeConfig struct {
-	Min   float64 `json:"min"`
-	Max   float64 `json:"max"`
-	Field string  `json:"field"` // "cost" or "tokens"
-}
-
-func buildCodeEvaluator(config json.RawMessage) (Evaluator, error) {
-	var cfg map[string]interface{}
-	if err := json.Unmarshal(config, &cfg); err != nil {
-		return nil, fmt.Errorf("parsing code evaluator config: %w", err)
+// buildEvaluator resolves a stored evaluator type to a registered evaluator.
+//
+// The legacy `CODE` type does not name an evaluator; the name lives in the
+// config's `evaluator` field instead. That indirection is preserved so
+// configurations written before the registry keep working, including their
+// original behaviour of falling back to a no-op for an unrecognised name.
+func (s *EvaluatorConfigService) buildEvaluator(evalType string, config json.RawMessage) (evaluator.Evaluator, error) {
+	if strings.EqualFold(evalType, string(EvaluatorTypeCode)) {
+		name := legacyEvaluatorName(config)
+		if name == "" || !evaluator.Exists(name) {
+			return noopEvaluator{}, nil
+		}
+		return evaluator.Build(name, config, s.deps)
 	}
 
-	evalType, _ := cfg["evaluator"].(string)
-	switch evalType {
-	case "length_check":
-		var c lengthCheckConfig
-		json.Unmarshal(config, &c)
-		return &lengthCheckEvaluator{config: c}, nil
-	case "keyword_check":
-		var c keywordCheckConfig
-		json.Unmarshal(config, &c)
-		return &keywordCheckEvaluator{config: c}, nil
-	case "regex_check":
-		var c regexCheckConfig
-		json.Unmarshal(config, &c)
-		return &regexCheckEvaluator{config: c}, nil
-	case "numeric_range":
-		var c numericRangeConfig
-		json.Unmarshal(config, &c)
-		return &numericRangeEvaluator{config: c}, nil
-	default:
-		return &noopEvaluator{}, nil
-	}
+	return evaluator.Build(evalType, config, s.deps)
 }
 
-// LLM Judge evaluator
-type llmJudgeConfig struct {
-	APIURL   string  `json:"api_url"`
-	APIKey   string  `json:"api_key"`
-	Model    string  `json:"model"`
-	Prompt   string  `json:"prompt"`
-	MaxScore float64 `json:"max_score"`
+// legacyEvaluatorName reads the evaluator name out of a legacy CODE config.
+func legacyEvaluatorName(config json.RawMessage) string {
+	var fields struct {
+		Evaluator string `json:"evaluator"`
+	}
+	if err := json.Unmarshal(config, &fields); err != nil {
+		return ""
+	}
+	return fields.Evaluator
 }
 
-func buildLLMJudgeEvaluator(config json.RawMessage) (Evaluator, error) {
-	var c llmJudgeConfig
-	if err := json.Unmarshal(config, &c); err != nil {
-		return nil, fmt.Errorf("parsing LLM judge config: %w", err)
-	}
-	if c.MaxScore == 0 {
-		c.MaxScore = 10
-	}
-	return &llmJudgeEvaluator{config: c}, nil
-}
-
-// --- Built-in evaluators ---
-
+// noopEvaluator preserves the pre-registry behaviour for an unrecognised legacy
+// CODE evaluator: score zero and say so, rather than fail the run.
 type noopEvaluator struct{}
 
-func (e *noopEvaluator) Evaluate(_ context.Context, _ db.Trace, _ []db.Observation) (float64, string, error) {
-	return 0, "noop evaluator", nil
+func (noopEvaluator) Evaluate(context.Context, evaluator.Target) (evaluator.Result, error) {
+	return evaluator.Result{
+		Score:    0,
+		DataType: evaluator.DataTypeNumeric,
+		Reason:   "noop evaluator",
+	}, nil
 }
 
-type lengthCheckEvaluator struct {
-	config lengthCheckConfig
-}
-
-func (e *lengthCheckEvaluator) Evaluate(_ context.Context, trace db.Trace, _ []db.Observation) (float64, string, error) {
-	var text string
-	switch e.config.Field {
-	case "output":
-		text = string(trace.Output)
-	default:
-		text = string(trace.Input)
+// BuildTarget assembles the material an evaluator scores from a stored trace.
+// expected carries a dataset item's expected output during an experiment, and
+// is empty when scoring a production trace.
+func BuildTarget(trace db.Trace, observations []db.Observation, expected string) evaluator.Target {
+	target := evaluator.Target{
+		Input:    decodeJSONText(trace.Input),
+		Output:   decodeJSONText(trace.Output),
+		Expected: expected,
+		Metadata: decodeJSONObject(trace.Metadata),
 	}
 
-	length := len(text)
-	score := 1.0
-	reason := fmt.Sprintf("length=%d", length)
-
-	if e.config.MinLength > 0 && length < e.config.MinLength {
-		score = 0
-		reason = fmt.Sprintf("length=%d, below minimum %d", length, e.config.MinLength)
+	if trace.TotalCost.Valid {
+		target.Cost = trace.TotalCost.Float64
 	}
-	if e.config.MaxLength > 0 && length > e.config.MaxLength {
-		score = 0
-		reason = fmt.Sprintf("length=%d, above maximum %d", length, e.config.MaxLength)
-	}
+	usage := parseTokenUsage(trace.TokenUsage)
+	target.InputTokens = usage.InputTokens
+	target.OutputTokens = usage.OutputTokens
+	target.TotalTokens = usage.TotalTokens
 
-	return score, reason, nil
-}
-
-type keywordCheckEvaluator struct {
-	config keywordCheckConfig
-}
-
-func (e *keywordCheckEvaluator) Evaluate(_ context.Context, trace db.Trace, _ []db.Observation) (float64, string, error) {
-	var text string
-	switch e.config.Field {
-	case "output":
-		text = string(trace.Output)
-	default:
-		text = string(trace.Input)
+	if trace.StartTime.Valid && trace.EndTime.Valid {
+		target.LatencySeconds = trace.EndTime.Time.Sub(trace.StartTime.Time).Seconds()
 	}
 
-	text = strings.ToLower(text)
-	found := 0
-	for _, kw := range e.config.Keywords {
-		if strings.Contains(text, strings.ToLower(kw)) {
-			found++
+	target.ObservationCount = len(observations)
+	for _, obs := range observations {
+		if obs.Status == "ERROR" || obs.Level == "ERROR" {
+			target.ErrorCount++
+		}
+		// A generation's model identifies the trace when the trace itself has none.
+		if target.Model == "" && obs.Model.Valid {
+			target.Model = obs.Model.String
 		}
 	}
 
-	score := float64(found) / float64(len(e.config.Keywords))
-	if e.config.Mode == "not_contains" {
-		score = 1 - score
-	}
-
-	reason := fmt.Sprintf("found %d/%d keywords", found, len(e.config.Keywords))
-	return score, reason, nil
+	return target
 }
 
-type regexCheckEvaluator struct {
-	config regexCheckConfig
+// decodeJSONText renders a stored JSONB value as text: a JSON string is
+// unquoted, anything else is returned as compact JSON.
+func decodeJSONText(raw []byte) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var asString string
+	if err := json.Unmarshal(raw, &asString); err == nil {
+		return asString
+	}
+	return string(raw)
 }
 
-func (e *regexCheckEvaluator) Evaluate(_ context.Context, trace db.Trace, _ []db.Observation) (float64, string, error) {
-	var text string
-	switch e.config.Field {
-	case "output":
-		text = string(trace.Output)
-	default:
-		text = string(trace.Input)
+// decodeJSONObject decodes a stored JSONB object, returning nil for anything else.
+func decodeJSONObject(raw []byte) map[string]interface{} {
+	if len(raw) == 0 {
+		return nil
 	}
+	var obj map[string]interface{}
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return nil
+	}
+	return obj
+}
 
-	matched, err := regexp.MatchString(e.config.Pattern, text)
+// avgScore averages the numeric results of a run, ignoring failures.
+func avgScore(results []EvaluationResult) float64 {
+	sum := 0.0
+	count := 0
+	for _, r := range results {
+		if r.Error != "" || r.DataType == evaluator.DataTypeCategorical {
+			continue
+		}
+		sum += r.Score
+		count++
+	}
+	if count == 0 {
+		return 0
+	}
+	return math.Round(sum/float64(count)*1000) / 1000
+}
+
+// --- backward-compatible shim --------------------------------------------
+
+// Evaluator is the pre-registry evaluator interface, kept so existing callers
+// and tests continue to compile. New code should use evaluator.Evaluator, which
+// carries the richer target and result types.
+type Evaluator interface {
+	Evaluate(ctx context.Context, trace db.Trace, observations []db.Observation) (float64, string, error)
+}
+
+// legacyAdapter presents a registry evaluator through the old interface.
+type legacyAdapter struct {
+	inner evaluator.Evaluator
+}
+
+func (a legacyAdapter) Evaluate(ctx context.Context, trace db.Trace, observations []db.Observation) (float64, string, error) {
+	result, err := a.inner.Evaluate(ctx, BuildTarget(trace, observations, ""))
 	if err != nil {
-		return 0, fmt.Sprintf("invalid regex: %v", err), nil
+		return 0, "", err
 	}
-
-	score := 0.0
-	reason := fmt.Sprintf("pattern=%s, matched=%v", e.config.Pattern, matched)
-	if matched {
-		score = 1
-	}
-
-	return score, reason, nil
+	return result.Score, result.Reason, nil
 }
 
-type numericRangeEvaluator struct {
-	config numericRangeConfig
+// BuildEvaluatorForTest creates an evaluator from a stored type and config,
+// exposed through the legacy interface for tests.
+func BuildEvaluatorForTest(evalType string, config json.RawMessage) (Evaluator, error) {
+	service := &EvaluatorConfigService{
+		deps: evaluator.Deps{HTTPClient: &http.Client{Timeout: 30 * time.Second}},
+	}
+	impl, err := service.buildEvaluator(evalType, config)
+	if err != nil {
+		return nil, err
+	}
+	return legacyAdapter{inner: impl}, nil
 }
 
-func (e *numericRangeEvaluator) Evaluate(_ context.Context, trace db.Trace, _ []db.Observation) (float64, string, error) {
-	var value float64
-	switch e.config.Field {
-	case "cost":
-		if trace.TotalCost.Valid {
-			value = trace.TotalCost.Float64
-		}
-	default:
-		return 0, "unsupported field for numeric range", nil
-	}
-
-	score := 0.0
-	reason := fmt.Sprintf("value=%.6f, range=[%.6f, %.6f]", value, e.config.Min, e.config.Max)
-	if value >= e.config.Min && value <= e.config.Max {
-		score = 1
-		reason = fmt.Sprintf("value=%.6f within range", value)
-	}
-
-	return score, reason, nil
-}
-
-// LLM Judge evaluator — calls an external LLM API
-type llmJudgeEvaluator struct {
-	config llmJudgeConfig
-}
-
-func (e *llmJudgeEvaluator) Evaluate(ctx context.Context, trace db.Trace, _ []db.Observation) (float64, string, error) {
-	if e.config.APIURL == "" {
-		return 0, "LLM judge requires api_url in config", fmt.Errorf("missing api_url")
-	}
-
-	// Build the prompt with trace data
-	prompt := e.config.Prompt
-	prompt = strings.ReplaceAll(prompt, "{{input}}", string(trace.Input))
-	prompt = strings.ReplaceAll(prompt, "{{output}}", string(trace.Output))
-
-	// For now, return a placeholder — full LLM API integration would go here
-	// This creates the score entry and can be extended with actual API calls
-	return 0.5, fmt.Sprintf("LLM judge placeholder (model=%s)", e.config.Model), nil
+// SortedEvaluatorNames returns the registered evaluator names in order.
+func SortedEvaluatorNames() []string {
+	names := evaluator.Names()
+	sort.Strings(names)
+	return names
 }

@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Config holds all configuration for the application
@@ -31,6 +32,17 @@ type Config struct {
 	// Logging
 	LogLevel  string
 	LogFormat string
+
+	// Evaluation
+	EvaluatorTimeout time.Duration
+
+	// Ingestion
+	WorkerConcurrency int
+	DBMaxConns        int32
+
+	// HTTP security
+	CORSAllowedOrigins []string
+	RateLimitPerMinute int
 }
 
 // Load loads configuration from environment variables
@@ -47,7 +59,31 @@ func Load() *Config {
 		MaxUploadSize: getEnvAsInt64("MAX_UPLOAD_SIZE", 10485760),
 		LogLevel:      getEnv("LOG_LEVEL", "debug"),
 		LogFormat:     getEnv("LOG_FORMAT", "json"),
+
+		EvaluatorTimeout: time.Duration(getEnvAsInt("EVALUATOR_TIMEOUT_SECONDS", 30)) * time.Second,
+
+		// Zero lets the worker size its pool from the available CPUs.
+		WorkerConcurrency: getEnvAsInt("WORKER_CONCURRENCY", 0),
+		DBMaxConns:        int32(getEnvAsInt("DB_MAX_CONNS", 20)),
+
+		CORSAllowedOrigins: splitAndTrim(getEnv("CORS_ALLOWED_ORIGINS", "")),
+		RateLimitPerMinute: getEnvAsInt("RATE_LIMIT_PER_MINUTE", 0),
 	}
+}
+
+// splitAndTrim parses a comma-separated environment value into a slice.
+func splitAndTrim(raw string) []string {
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 func getEnv(key, defaultValue string) string {

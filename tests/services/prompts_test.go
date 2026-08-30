@@ -1,8 +1,10 @@
 package services_test
 
 import (
+	"encoding/json"
 	"testing"
 
+	"github.com/langfuse-light/langfuse-light/internal/db"
 	"github.com/langfuse-light/langfuse-light/internal/services"
 )
 
@@ -69,5 +71,72 @@ func TestExtractTemplateVariables_None(t *testing.T) {
 	vars := svc.ExtractTemplateVariables("no variables here")
 	if len(vars) != 0 {
 		t.Errorf("expected 0 variables, got %d: %v", len(vars), vars)
+	}
+}
+
+// --- prompt body encoding and label resolution -------------------------------
+
+// promptRow builds a stored prompt row for Describe().
+func promptRow(promptType, body string) db.Prompt {
+	return db.Prompt{Type: promptType, Prompt: json.RawMessage(body)}
+}
+
+func TestDescribeTextPrompt(t *testing.T) {
+	service := services.NewPromptService(nil)
+
+	described := service.Describe(promptRow("text", `"Hello {{name}}, welcome to {{product}}!"`))
+
+	if described.PromptText != "Hello {{name}}, welcome to {{product}}!" {
+		t.Errorf("expected the decoded template, got %q", described.PromptText)
+	}
+	if len(described.Variables) != 2 ||
+		described.Variables[0] != "name" || described.Variables[1] != "product" {
+		t.Errorf("expected [name product] in order of appearance, got %v", described.Variables)
+	}
+	if len(described.ChatMessages) != 0 {
+		t.Error("expected no chat messages for a text prompt")
+	}
+}
+
+func TestDescribeChatPrompt(t *testing.T) {
+	service := services.NewPromptService(nil)
+
+	body := `[{"role":"system","content":"You are {{persona}}."},{"role":"user","content":"{{question}}"}]`
+	described := service.Describe(promptRow("chat", body))
+
+	if len(described.ChatMessages) != 2 {
+		t.Fatalf("expected 2 chat messages, got %d", len(described.ChatMessages))
+	}
+	if described.ChatMessages[0].Role != "system" {
+		t.Errorf("expected the first role to be system, got %q", described.ChatMessages[0].Role)
+	}
+	// Variables are collected across every message, so a template is complete
+	// only when all of them are supplied.
+	if len(described.Variables) != 2 {
+		t.Errorf("expected variables from both messages, got %v", described.Variables)
+	}
+}
+
+func TestCompileTemplateToleratesInnerWhitespace(t *testing.T) {
+	service := services.NewPromptService(nil)
+
+	compiled, err := service.CompileTemplate("Hi {{ name }}!", map[string]string{"name": "Ada"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if compiled != "Hi Ada!" {
+		t.Errorf("expected whitespace inside the placeholder to be tolerated, got %q", compiled)
+	}
+}
+
+func TestCompileTemplateRepeatsAVariable(t *testing.T) {
+	service := services.NewPromptService(nil)
+
+	compiled, err := service.CompileTemplate("{{x}} and {{x}}", map[string]string{"x": "y"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if compiled != "y and y" {
+		t.Errorf("expected every occurrence to be substituted, got %q", compiled)
 	}
 }

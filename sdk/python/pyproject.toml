@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "langfuse-light"
+version = "0.1.0"
+description = "Lightweight Python client for Langfuse Light — LLM tracing, prompts and scores"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+# No runtime dependencies on purpose: the SDK uses only the standard library so
+# it cannot pull a transitive tree into the application it instruments.
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/langfuse-light/langfuse-light"
+
+[tool.setuptools.packages.find]
+include = ["langfuse_light*"]

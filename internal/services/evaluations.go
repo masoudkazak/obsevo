@@ -2,7 +2,9 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -60,35 +62,79 @@ func toInt64(v interface{}) int64 {
 	return 0
 }
 
+// Score sources and data types accepted on the API.
+const (
+	ScoreDataTypeNumeric     = "NUMERIC"
+	ScoreDataTypeCategorical = "CATEGORICAL"
+	ScoreDataTypeBoolean     = "BOOLEAN"
+)
+
 // CreateScoreRequest is the request body for creating a score.
+// A score attaches to a trace, an observation, a session or a dataset run;
+// at least one of those targets must be supplied.
 type CreateScoreRequest struct {
-	TraceID string  `json:"trace_id"`
-	Name    string  `json:"name"`
-	Value   float64 `json:"value"`
-	Comment string  `json:"comment"`
-	Source  string  `json:"source"`
-	UserID  string  `json:"user_id"`
+	ID            string          `json:"id"`
+	TraceID       string          `json:"trace_id"`
+	ObservationID string          `json:"observation_id"`
+	SessionID     string          `json:"session_id"`
+	DatasetRunID  string          `json:"dataset_run_id"`
+	Name          string          `json:"name"`
+	Value         *float64        `json:"value"`
+	StringValue   string          `json:"string_value"`
+	DataType      string          `json:"data_type"`
+	Comment       string          `json:"comment"`
+	Source        string          `json:"source"`
+	UserID        string          `json:"user_id"`
+	ConfigID      string          `json:"config_id"`
+	Metadata      json.RawMessage `json:"metadata"`
 }
 
-// CreateScore creates a new score for a trace.
-func (s *EvaluationService) CreateScore(ctx context.Context, req CreateScoreRequest) (db.Score, error) {
-	if req.TraceID == "" {
-		return db.Score{}, fmt.Errorf("trace_id is required")
-	}
+// CreateScore creates a score within a project.
+func (s *EvaluationService) CreateScore(ctx context.Context, projectID string, req CreateScoreRequest) (db.Score, error) {
 	if req.Name == "" {
 		return db.Score{}, fmt.Errorf("name is required")
+	}
+	if req.TraceID == "" && req.ObservationID == "" && req.SessionID == "" && req.DatasetRunID == "" {
+		return db.Score{}, fmt.Errorf("one of trace_id, observation_id, session_id or dataset_run_id is required")
 	}
 	if req.Source == "" {
 		req.Source = "USER"
 	}
 
+	dataType, value, err := resolveScoreValue(req)
+	if err != nil {
+		return db.Score{}, err
+	}
+
+	// An observation implies its trace; fill it in so trace-scoped queries see
+	// observation-level scores.
+	if req.TraceID == "" && req.ObservationID != "" {
+		obs, err := s.queries.GetObservationByIDAndProject(ctx, db.GetObservationByIDAndProjectParams{
+			ID:        req.ObservationID,
+			ProjectID: projectID,
+		})
+		if err != nil {
+			return db.Score{}, fmt.Errorf("resolving observation for score: %w", err)
+		}
+		req.TraceID = obs.TraceID
+	}
+
 	score, err := s.queries.CreateScore(ctx, db.CreateScoreParams{
-		TraceID: req.TraceID,
-		Name:    req.Name,
-		Value:   pgtype.Float8{Float64: req.Value, Valid: true},
-		Comment: pgtype.Text{String: req.Comment, Valid: req.Comment != ""},
-		Source:  req.Source,
-		UserID:  pgtype.Text{String: req.UserID, Valid: req.UserID != ""},
+		ID:            req.ID,
+		ProjectID:     projectID,
+		TraceID:       req.TraceID,
+		ObservationID: req.ObservationID,
+		SessionID:     req.SessionID,
+		DatasetRunID:  req.DatasetRunID,
+		Name:          req.Name,
+		Value:         value,
+		StringValue:   req.StringValue,
+		DataType:      dataType,
+		Comment:       req.Comment,
+		Source:        req.Source,
+		UserID:        req.UserID,
+		ConfigID:      req.ConfigID,
+		Metadata:      req.Metadata,
 	})
 	if err != nil {
 		return db.Score{}, fmt.Errorf("creating score: %w", err)
@@ -97,13 +143,104 @@ func (s *EvaluationService) CreateScore(ctx context.Context, req CreateScoreRequ
 	return score, nil
 }
 
-// GetScore returns a score by ID.
-func (s *EvaluationService) GetScore(ctx context.Context, id string) (db.Score, error) {
-	score, err := s.queries.GetScoreByID(ctx, id)
+// resolveScoreValue infers the score data type when the client omits it and
+// checks that the value matching that type is present.
+func resolveScoreValue(req CreateScoreRequest) (string, pgtype.Float8, error) {
+	dataType := strings.ToUpper(req.DataType)
+	if dataType == "" {
+		if req.Value == nil && req.StringValue != "" {
+			dataType = ScoreDataTypeCategorical
+		} else {
+			dataType = ScoreDataTypeNumeric
+		}
+	}
+
+	switch dataType {
+	case ScoreDataTypeNumeric, ScoreDataTypeBoolean:
+		if req.Value == nil {
+			// Historic clients posted a score with no value and relied on it
+			// defaulting to zero; keep that behaviour rather than rejecting.
+			return dataType, pgtype.Float8{Float64: 0, Valid: true}, nil
+		}
+		return dataType, pgtype.Float8{Float64: *req.Value, Valid: true}, nil
+	case ScoreDataTypeCategorical:
+		if req.StringValue == "" {
+			return "", pgtype.Float8{}, fmt.Errorf("string_value is required for a CATEGORICAL score")
+		}
+		return dataType, nullableFloat(req.Value), nil
+	default:
+		return "", pgtype.Float8{}, fmt.Errorf("unknown score data_type %q", req.DataType)
+	}
+}
+
+// GetScore returns a score by ID, scoped to a project.
+func (s *EvaluationService) GetScore(ctx context.Context, projectID, id string) (db.Score, error) {
+	score, err := s.queries.GetScoreByIDAndProject(ctx, db.GetScoreByIDAndProjectParams{
+		ID:        id,
+		ProjectID: projectID,
+	})
 	if err != nil {
 		return db.Score{}, fmt.Errorf("getting score: %w", err)
 	}
 	return score, nil
+}
+
+// DeleteScore removes a score from a project.
+func (s *EvaluationService) DeleteScore(ctx context.Context, projectID, id string) error {
+	if err := s.queries.DeleteScore(ctx, db.DeleteScoreParams{ID: id, ProjectID: projectID}); err != nil {
+		return fmt.Errorf("deleting score: %w", err)
+	}
+	return nil
+}
+
+// ListScoresRequest contains filters for listing scores.
+type ListScoresRequest struct {
+	ProjectID     string
+	Name          string
+	Source        string
+	TraceID       string
+	ObservationID string
+	DataType      string
+	Limit         int32
+	Offset        int32
+}
+
+// ListScoresResponse is the paginated response for listing scores.
+type ListScoresResponse struct {
+	Scores []db.Score `json:"scores"`
+	Total  int64      `json:"total"`
+	Limit  int32      `json:"limit"`
+	Offset int32      `json:"offset"`
+}
+
+// ListScores lists scores for a project with optional filters.
+func (s *EvaluationService) ListScores(ctx context.Context, req ListScoresRequest) (ListScoresResponse, error) {
+	limit, offset := normalizePagination(req.Limit, req.Offset)
+
+	scores, err := s.queries.ListScores(ctx, db.ListScoresParams{
+		ProjectID:     req.ProjectID,
+		Name:          req.Name,
+		Source:        req.Source,
+		TraceID:       req.TraceID,
+		ObservationID: req.ObservationID,
+		DataType:      strings.ToUpper(req.DataType),
+		Limit:         limit,
+		Offset:        offset,
+	})
+	if err != nil {
+		return ListScoresResponse{}, fmt.Errorf("listing scores: %w", err)
+	}
+
+	total, err := s.queries.CountScores(ctx, db.CountScoresParams{
+		ProjectID: req.ProjectID,
+		Name:      req.Name,
+		Source:    req.Source,
+	})
+	if err != nil {
+		return ListScoresResponse{}, fmt.Errorf("counting scores: %w", err)
+	}
+
+	return ListScoresResponse{Scores: scores, Total: total, Limit: limit, Offset: offset}, nil
 }
 
 // ListScoresByTrace returns all scores for a trace.

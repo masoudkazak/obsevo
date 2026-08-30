@@ -9,6 +9,17 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 	if (token) {
 		headers['Authorization'] = `Bearer ${token}`;
 	}
+
+	// The API authorizes the caller against a project before any handler runs.
+	// Sending the selected project on every request means detail endpoints
+	// (a trace, an observation, a score) are scoped without each call site
+	// having to thread the id through.
+	const projectId =
+		typeof localStorage !== 'undefined' ? localStorage.getItem('project_id') : null;
+	if (projectId && !headers['X-Project-Id']) {
+		headers['X-Project-Id'] = projectId;
+	}
+
 	const res = await fetch(`${BASE}${path}`, { ...options, headers });
 	if (!res.ok) {
 		const body = await res.json().catch(() => ({ error: res.statusText }));

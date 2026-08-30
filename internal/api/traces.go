@@ -3,7 +3,6 @@ package api
 import (
 	"encoding/json"
 	"net/http"
-	"strconv"
 
 	"github.com/go-chi/chi/v5"
 
@@ -22,9 +21,8 @@ func NewTraceHandler(traceService *services.TraceService) *TraceHandler {
 
 // CreateTrace handles POST /api/traces.
 func (h *TraceHandler) CreateTrace(w http.ResponseWriter, r *http.Request) {
-	projectID := r.URL.Query().Get("project_id")
-	if projectID == "" {
-		writeError(w, http.StatusBadRequest, "project_id is required")
+	projectID, ok := requireProject(w, r)
+	if !ok {
 		return
 	}
 
@@ -41,7 +39,7 @@ func (h *TraceHandler) CreateTrace(w http.ResponseWriter, r *http.Request) {
 
 	trace, err := h.traceService.CreateTrace(r.Context(), projectID, req)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to create trace: "+err.Error())
+		writeServiceError(w, err, "trace not found")
 		return
 	}
 
@@ -50,9 +48,12 @@ func (h *TraceHandler) CreateTrace(w http.ResponseWriter, r *http.Request) {
 
 // GetTrace handles GET /api/traces/:id.
 func (h *TraceHandler) GetTrace(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	projectID, ok := requireProject(w, r)
+	if !ok {
+		return
+	}
 
-	trace, observations, err := h.traceService.GetTraceDetail(r.Context(), id)
+	trace, observations, err := h.traceService.GetTraceDetail(r.Context(), projectID, chi.URLParam(r, "id"))
 	if err != nil {
 		writeError(w, http.StatusNotFound, "trace not found")
 		return
@@ -64,23 +65,42 @@ func (h *TraceHandler) GetTrace(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ListTraces handles GET /api/traces.
-func (h *TraceHandler) ListTraces(w http.ResponseWriter, r *http.Request) {
-	projectID := r.URL.Query().Get("project_id")
-	if projectID == "" {
-		writeError(w, http.StatusBadRequest, "project_id is required")
+// DeleteTrace handles DELETE /api/traces/:id.
+func (h *TraceHandler) DeleteTrace(w http.ResponseWriter, r *http.Request) {
+	projectID, ok := requireProject(w, r)
+	if !ok {
 		return
 	}
 
-	limit, _ := strconv.ParseInt(r.URL.Query().Get("limit"), 10, 32)
-	offset, _ := strconv.ParseInt(r.URL.Query().Get("offset"), 10, 32)
-	name := r.URL.Query().Get("name")
+	if err := h.traceService.DeleteTrace(r.Context(), projectID, chi.URLParam(r, "id")); err != nil {
+		writeServiceError(w, err, "trace not found")
+		return
+	}
 
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+// ListTraces handles GET /api/traces.
+func (h *TraceHandler) ListTraces(w http.ResponseWriter, r *http.Request) {
+	projectID, ok := requireProject(w, r)
+	if !ok {
+		return
+	}
+
+	q := r.URL.Query()
 	resp, err := h.traceService.ListTraces(r.Context(), services.ListTracesRequest{
-		ProjectID: projectID,
-		Name:      name,
-		Limit:     int32(limit),
-		Offset:    int32(offset),
+		ProjectID:   projectID,
+		Name:        q.Get("name"),
+		UserID:      q.Get("user_id"),
+		SessionID:   q.Get("session_id"),
+		Release:     q.Get("release"),
+		Version:     q.Get("version"),
+		Environment: q.Get("environment"),
+		Tags:        queryCSV(r, "tags"),
+		FromTime:    q.Get("from_time"),
+		ToTime:      q.Get("to_time"),
+		Limit:       queryInt32(r, "limit", 50),
+		Offset:      queryInt32(r, "offset", 0),
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list traces")
@@ -92,6 +112,11 @@ func (h *TraceHandler) ListTraces(w http.ResponseWriter, r *http.Request) {
 
 // CreateObservation handles POST /api/observations.
 func (h *TraceHandler) CreateObservation(w http.ResponseWriter, r *http.Request) {
+	projectID, ok := requireProject(w, r)
+	if !ok {
+		return
+	}
+
 	var req services.CreateObservationRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
@@ -103,13 +128,9 @@ func (h *TraceHandler) CreateObservation(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if req.Type == "" {
-		req.Type = "SPAN"
-	}
-
-	obs, err := h.traceService.CreateObservation(r.Context(), req)
+	obs, err := h.traceService.CreateObservation(r.Context(), projectID, req)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to create observation: "+err.Error())
+		writeServiceError(w, err, "observation not found")
 		return
 	}
 
@@ -118,15 +139,82 @@ func (h *TraceHandler) CreateObservation(w http.ResponseWriter, r *http.Request)
 
 // GetObservation handles GET /api/observations/:id.
 func (h *TraceHandler) GetObservation(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	projectID, ok := requireProject(w, r)
+	if !ok {
+		return
+	}
 
-	obs, err := h.traceService.GetObservation(r.Context(), id)
+	obs, err := h.traceService.GetObservation(r.Context(), projectID, chi.URLParam(r, "id"))
 	if err != nil {
 		writeError(w, http.StatusNotFound, "observation not found")
 		return
 	}
 
 	writeJSON(w, http.StatusOK, obs)
+}
+
+// ListObservations handles GET /api/observations.
+func (h *TraceHandler) ListObservations(w http.ResponseWriter, r *http.Request) {
+	projectID, ok := requireProject(w, r)
+	if !ok {
+		return
+	}
+
+	q := r.URL.Query()
+	resp, err := h.traceService.ListObservations(r.Context(), services.ListObservationsRequest{
+		ProjectID: projectID,
+		TraceID:   q.Get("trace_id"),
+		Type:      q.Get("type"),
+		Name:      q.Get("name"),
+		Model:     q.Get("model"),
+		Level:     q.Get("level"),
+		FromTime:  q.Get("from_time"),
+		ToTime:    q.Get("to_time"),
+		Limit:     queryInt32(r, "limit", 50),
+		Offset:    queryInt32(r, "offset", 0),
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list observations")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// ListSessions handles GET /api/sessions.
+func (h *TraceHandler) ListSessions(w http.ResponseWriter, r *http.Request) {
+	projectID, ok := requireProject(w, r)
+	if !ok {
+		return
+	}
+
+	resp, err := h.traceService.ListSessions(r.Context(), projectID,
+		queryInt32(r, "limit", 50), queryInt32(r, "offset", 0))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list sessions")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// GetSession handles GET /api/sessions/:id.
+func (h *TraceHandler) GetSession(w http.ResponseWriter, r *http.Request) {
+	projectID, ok := requireProject(w, r)
+	if !ok {
+		return
+	}
+
+	session, traces, err := h.traceService.GetSessionDetail(r.Context(), projectID, chi.URLParam(r, "id"))
+	if err != nil {
+		writeError(w, http.StatusNotFound, "session not found")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"session": session,
+		"traces":  traces,
+	})
 }
 
 // BatchIngestionRequest is the request body for batch ingestion.
@@ -137,9 +225,8 @@ type BatchIngestionRequest struct {
 
 // BatchIngestion handles POST /api/ingestion.
 func (h *TraceHandler) BatchIngestion(w http.ResponseWriter, r *http.Request) {
-	projectID := r.URL.Query().Get("project_id")
-	if projectID == "" {
-		writeError(w, http.StatusBadRequest, "project_id is required")
+	projectID, ok := requireProject(w, r)
+	if !ok {
 		return
 	}
 
@@ -154,9 +241,8 @@ func (h *TraceHandler) BatchIngestion(w http.ResponseWriter, r *http.Request) {
 		if t.ID == "" {
 			continue
 		}
-		_, err := h.traceService.CreateTrace(r.Context(), projectID, t)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "failed to create trace: "+err.Error())
+		if _, err := h.traceService.CreateTrace(r.Context(), projectID, t); err != nil {
+			writeServiceError(w, err, "trace not found")
 			return
 		}
 		createdTraces++
@@ -167,9 +253,8 @@ func (h *TraceHandler) BatchIngestion(w http.ResponseWriter, r *http.Request) {
 		if obs.TraceID == "" {
 			continue
 		}
-		_, err := h.traceService.CreateObservation(r.Context(), obs)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "failed to create observation: "+err.Error())
+		if _, err := h.traceService.CreateObservation(r.Context(), projectID, obs); err != nil {
+			writeServiceError(w, err, "observation not found")
 			return
 		}
 		createdObservations++
@@ -186,7 +271,11 @@ func (h *TraceHandler) RegisterRoutes(r chi.Router) {
 	r.Post("/traces", h.CreateTrace)
 	r.Get("/traces", h.ListTraces)
 	r.Get("/traces/{id}", h.GetTrace)
+	r.Delete("/traces/{id}", h.DeleteTrace)
 	r.Post("/observations", h.CreateObservation)
+	r.Get("/observations", h.ListObservations)
 	r.Get("/observations/{id}", h.GetObservation)
+	r.Get("/sessions", h.ListSessions)
+	r.Get("/sessions/{id}", h.GetSession)
 	r.Post("/ingestion", h.BatchIngestion)
 }

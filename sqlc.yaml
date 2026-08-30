@@ -4,7 +4,11 @@ sql:
     queries: "internal/db/queries.sql"
     schema:
       - "migrations/001_init.up.sql"
+      - "migrations/002_add_indexes.up.sql"
       - "migrations/003_evaluators.up.sql"
+      - "migrations/004_cascade_deletes.up.sql"
+      - "migrations/005_langfuse_compat.up.sql"
+      - "migrations/007_security_and_evaluators.up.sql"
     gen:
       go:
         package: "db"
@@ -13,3 +17,17 @@ sql:
         emit_json_tags: true
         emit_db_tags: true
         emit_empty_slices: true
+        # Without this, JSONB columns generate as []byte, which encoding/json
+        # base64-encodes in API responses. json.RawMessage passes the stored
+        # JSON through verbatim, which is what Langfuse clients expect.
+        overrides:
+          - db_type: "jsonb"
+            go_type: "encoding/json.RawMessage"
+          - db_type: "jsonb"
+            nullable: true
+            go_type: "encoding/json.RawMessage"
+          - db_type: "pg_catalog.jsonb"
+            go_type: "encoding/json.RawMessage"
+          - db_type: "pg_catalog.jsonb"
+            nullable: true
+            go_type: "encoding/json.RawMessage"

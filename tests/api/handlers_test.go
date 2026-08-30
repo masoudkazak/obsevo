@@ -157,7 +157,7 @@ func TestGetAnalyticsHandler_MissingProjectID(t *testing.T) {
 }
 
 func TestCreateDatasetHandler_MissingProjectID(t *testing.T) {
-	handler := api.NewDatasetHandler(services.NewDatasetService(nil))
+	handler := api.NewDatasetHandler(services.NewDatasetService(nil), services.NewExperimentService(nil))
 
 	body := `{"name":"test-dataset"}`
 	req := httptest.NewRequest("POST", "/datasets", bytes.NewBufferString(body))
@@ -170,7 +170,7 @@ func TestCreateDatasetHandler_MissingProjectID(t *testing.T) {
 }
 
 func TestCreateDatasetHandler_MissingName(t *testing.T) {
-	handler := api.NewDatasetHandler(services.NewDatasetService(nil))
+	handler := api.NewDatasetHandler(services.NewDatasetService(nil), services.NewExperimentService(nil))
 
 	body := `{"description":"test"}`
 	req := httptest.NewRequest("POST", "/datasets?project_id=proj-123", bytes.NewBufferString(body))
@@ -183,7 +183,7 @@ func TestCreateDatasetHandler_MissingName(t *testing.T) {
 }
 
 func TestListDatasetsHandler_MissingProjectID(t *testing.T) {
-	handler := api.NewDatasetHandler(services.NewDatasetService(nil))
+	handler := api.NewDatasetHandler(services.NewDatasetService(nil), services.NewExperimentService(nil))
 
 	req := httptest.NewRequest("GET", "/datasets", nil)
 	w := httptest.NewRecorder()
@@ -195,7 +195,7 @@ func TestListDatasetsHandler_MissingProjectID(t *testing.T) {
 }
 
 func TestCreateDatasetRunHandler_MissingName(t *testing.T) {
-	handler := api.NewDatasetHandler(services.NewDatasetService(nil))
+	handler := api.NewDatasetHandler(services.NewDatasetService(nil), services.NewExperimentService(nil))
 
 	body := `{}`
 	req := httptest.NewRequest("POST", "/datasets/ds-123/runs", bytes.NewBufferString(body))
@@ -208,7 +208,7 @@ func TestCreateDatasetRunHandler_MissingName(t *testing.T) {
 }
 
 func TestCreateDatasetRunItemHandler_MissingDatasetItemID(t *testing.T) {
-	handler := api.NewDatasetHandler(services.NewDatasetService(nil))
+	handler := api.NewDatasetHandler(services.NewDatasetService(nil), services.NewExperimentService(nil))
 
 	body := `{"observation_id":"obs-123"}`
 	req := httptest.NewRequest("POST", "/datasets/ds-123/runs/run-123/items", bytes.NewBufferString(body))

@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/langfuse-light/langfuse-light/internal/auth"
 	"github.com/langfuse-light/langfuse-light/internal/services"
 )
 
@@ -21,7 +22,7 @@ func NewEvaluatorHandler(evaluatorService *services.EvaluatorConfigService) *Eva
 
 // CreateEvaluatorConfig handles POST /api/evaluators.
 func (h *EvaluatorHandler) CreateEvaluatorConfig(w http.ResponseWriter, r *http.Request) {
-	projectID := r.URL.Query().Get("project_id")
+	projectID := auth.GetProjectID(r.Context())
 	if projectID == "" {
 		writeError(w, http.StatusBadRequest, "project_id is required")
 		return
@@ -44,7 +45,7 @@ func (h *EvaluatorHandler) CreateEvaluatorConfig(w http.ResponseWriter, r *http.
 
 // ListEvaluatorConfigs handles GET /api/evaluators.
 func (h *EvaluatorHandler) ListEvaluatorConfigs(w http.ResponseWriter, r *http.Request) {
-	projectID := r.URL.Query().Get("project_id")
+	projectID := auth.GetProjectID(r.Context())
 	if projectID == "" {
 		writeError(w, http.StatusBadRequest, "project_id is required")
 		return
@@ -61,9 +62,13 @@ func (h *EvaluatorHandler) ListEvaluatorConfigs(w http.ResponseWriter, r *http.R
 
 // GetEvaluatorConfig handles GET /api/evaluators/{id}.
 func (h *EvaluatorHandler) GetEvaluatorConfig(w http.ResponseWriter, r *http.Request) {
+	projectID, ok := requireProject(w, r)
+	if !ok {
+		return
+	}
 	id := chi.URLParam(r, "id")
 
-	config, err := h.evaluatorService.GetEvaluatorConfig(r.Context(), id)
+	config, err := h.evaluatorService.GetEvaluatorConfig(r.Context(), projectID, id)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "evaluator config not found")
 		return
@@ -74,9 +79,13 @@ func (h *EvaluatorHandler) GetEvaluatorConfig(w http.ResponseWriter, r *http.Req
 
 // DeleteEvaluatorConfig handles DELETE /api/evaluators/{id}.
 func (h *EvaluatorHandler) DeleteEvaluatorConfig(w http.ResponseWriter, r *http.Request) {
+	projectID, ok := requireProject(w, r)
+	if !ok {
+		return
+	}
 	id := chi.URLParam(r, "id")
 
-	if err := h.evaluatorService.DeleteEvaluatorConfig(r.Context(), id); err != nil {
+	if err := h.evaluatorService.DeleteEvaluatorConfig(r.Context(), projectID, id); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to delete evaluator config: "+err.Error())
 		return
 	}
@@ -86,6 +95,10 @@ func (h *EvaluatorHandler) DeleteEvaluatorConfig(w http.ResponseWriter, r *http.
 
 // RunEvaluation handles POST /api/evaluators/{id}/run.
 func (h *EvaluatorHandler) RunEvaluation(w http.ResponseWriter, r *http.Request) {
+	projectID, ok := requireProject(w, r)
+	if !ok {
+		return
+	}
 	evaluatorID := chi.URLParam(r, "id")
 
 	var req services.EvaluateTracesRequest
@@ -99,18 +112,21 @@ func (h *EvaluatorHandler) RunEvaluation(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	run, err := h.evaluatorService.EvaluateTraces(r.Context(), evaluatorID, req)
+	run, results, err := h.evaluatorService.EvaluateTraces(r.Context(), projectID, evaluatorID, req)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to run evaluation: "+err.Error())
 		return
 	}
 
-	writeJSON(w, http.StatusOK, run)
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"run":     run,
+		"results": results,
+	})
 }
 
 // ListEvaluationRuns handles GET /api/evaluators/runs.
 func (h *EvaluatorHandler) ListEvaluationRuns(w http.ResponseWriter, r *http.Request) {
-	projectID := r.URL.Query().Get("project_id")
+	projectID := auth.GetProjectID(r.Context())
 	if projectID == "" {
 		writeError(w, http.StatusBadRequest, "project_id is required")
 		return
@@ -127,9 +143,13 @@ func (h *EvaluatorHandler) ListEvaluationRuns(w http.ResponseWriter, r *http.Req
 
 // GetEvaluationRun handles GET /api/evaluators/runs/{id}.
 func (h *EvaluatorHandler) GetEvaluationRun(w http.ResponseWriter, r *http.Request) {
+	projectID, ok := requireProject(w, r)
+	if !ok {
+		return
+	}
 	id := chi.URLParam(r, "id")
 
-	run, err := h.evaluatorService.GetEvaluationRun(r.Context(), id)
+	run, err := h.evaluatorService.GetEvaluationRun(r.Context(), projectID, id)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "evaluation run not found")
 		return
@@ -138,10 +158,20 @@ func (h *EvaluatorHandler) GetEvaluationRun(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusOK, run)
 }
 
+// ListEvaluatorTypes handles GET /api/evaluators/types.
+// It reports every registered evaluator, so a client never has to hardcode
+// the list.
+func (h *EvaluatorHandler) ListEvaluatorTypes(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"types": services.AvailableEvaluators(),
+	})
+}
+
 // RegisterRoutes registers evaluator routes.
 func (h *EvaluatorHandler) RegisterRoutes(r chi.Router) {
 	r.Post("/evaluators", h.CreateEvaluatorConfig)
 	r.Get("/evaluators", h.ListEvaluatorConfigs)
+	r.Get("/evaluators/types", h.ListEvaluatorTypes)
 	r.Get("/evaluators/{id}", h.GetEvaluatorConfig)
 	r.Delete("/evaluators/{id}", h.DeleteEvaluatorConfig)
 	r.Post("/evaluators/{id}/run", h.RunEvaluation)
