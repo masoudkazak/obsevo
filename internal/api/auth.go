@@ -101,7 +101,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		})
 		projects, _ := h.queries.GetProjectsByOrgID(ctx, org.ID)
 		if len(projects) == 0 {
-		h.queries.CreateProject(ctx, db.CreateProjectParams{Name: "My Project", OrgID: org.ID})
+			h.queries.CreateProject(ctx, db.CreateProjectParams{Name: "My Project", OrgID: org.ID})
 		}
 	}
 
