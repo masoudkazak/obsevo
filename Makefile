@@ -1,4 +1,4 @@
-.PHONY: all build run test lint fmt clean docker-up docker-down db-migrate db-rollback sqlc-generate
+.PHONY: all build run test lint fmt clean docker-up docker-down db-migrate db-rollback sqlc-generate benchmark
 
 # Variables
 APP_NAME := langfuse-light
@@ -102,3 +102,12 @@ help:
 	@echo "  make dev-setup    - Full development setup"
 	@echo "  make install-tools - Install development tools"
 	@echo "  make help         - Show this help"
+
+# Benchmark: runs the scenarios reported in docs/benchmark.md.
+# Requires the stack to be up and LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY set.
+benchmark:
+	@test -n "$$LANGFUSE_PUBLIC_KEY" || (echo "set LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY first" && exit 1)
+	@for rate in 100 1000 10000 60000; do \
+		echo "=== $$rate traces/min ==="; \
+		$(GO) run ./cmd/benchmark -rate $$rate -duration 30s -observations 4 || exit 1; \
+	done
