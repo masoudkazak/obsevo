@@ -62,6 +62,6 @@ func writeServiceError(w http.ResponseWriter, err error, notFoundMessage string)
 	case errors.Is(err, services.ErrCrossProject):
 		writeError(w, http.StatusForbidden, "entity belongs to a different project")
 	default:
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeError(w, http.StatusInternalServerError, "internal server error")
 	}
 }

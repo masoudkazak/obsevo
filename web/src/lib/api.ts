@@ -210,6 +210,9 @@ export interface APIKey {
 	key: string;
 	name: string;
 	created_at: string;
+	secret_key?: string;
+	public_key?: string;
+	display_secret_key?: string;
 }
 
 export interface Member {

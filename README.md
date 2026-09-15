@@ -144,12 +144,12 @@ client.flush()
 ### TypeScript
 
 ```typescript
-import { Langfuse } from "langfuse-light";
+import { Langfuse } from "obsevo";
 
 const client = new Langfuse({
   publicKey: "pk-...",
   secretKey: "sk-...",
-  baseUrl: "http://localhost:3001",
+  host: "http://localhost:3001",
 });
 
 // Create a trace
@@ -171,7 +171,7 @@ await trace.span({
 // Score the trace
 await trace.score({ name: "quality", value: 1, comment: "Looks good" });
 
-await client.shutdownAsync();
+await client.shutdown();
 ```
 
 ## API Reference

@@ -116,10 +116,10 @@ migrate -path migrations -database "postgres://obsevo:<password>@localhost:5432/
 ```nginx
 server {
     listen 443 ssl http2;
-    server_name langfuse.example.com;
+    server_name obsevo.example.com;
 
-    ssl_certificate     /etc/ssl/certs/langfuse.pem;
-    ssl_certificate_key /etc/ssl/private/langfuse.key;
+    ssl_certificate     /etc/ssl/certs/obsevo.pem;
+    ssl_certificate_key /etc/ssl/private/obsevo.key;
 
     location / {
         proxy_pass http://127.0.0.1:3001;
@@ -135,10 +135,10 @@ server {
 
 ```bash
 # Database backup
-docker compose exec postgres pg_dump -U langfuse langfuse_light > backup_$(date +%Y%m%d).sql
+docker compose exec postgres pg_dump -U obsevo obsevo > backup_$(date +%Y%m%d).sql
 
 # Restore
-cat backup_20260824.sql | docker compose exec -T postgres psql -U langfuse langfuse_light
+cat backup_20260824.sql | docker compose exec -T postgres psql -U obsevo obsevo
 ```
 
 ---

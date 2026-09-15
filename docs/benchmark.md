@@ -100,7 +100,7 @@ make run &                              # or: docker compose up -d api
 # Register, then create an API key in Settings → API Keys, or via the API.
 export LANGFUSE_PUBLIC_KEY=pk-lf-...
 export LANGFUSE_SECRET_KEY=sk-lf-...
-export DATABASE_URL='postgres://langfuse:langfuse@localhost:5432/langfuse_light?sslmode=disable'
+export DATABASE_URL='postgres://obsevo:obsevo@localhost:5432/obsevo?sslmode=disable'
 export REDIS_URL='redis://localhost:6379'
 
 make benchmark                          # runs the three scenarios above

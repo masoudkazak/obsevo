@@ -7,6 +7,7 @@
 	let newKeyName = $state('');
 	let creating = $state(false);
 	let showKey = $state<string | null>(null);
+	let showPublicKey = $state<string | null>(null);
 
 	async function loadKeys() {
 		if (!$currentProject) return;
@@ -25,7 +26,8 @@
 		creating = true;
 		try {
 			const key = await api.settings.apiKeys.create($currentProject.id, { name: newKeyName.trim() });
-			showKey = key.key;
+			showKey = key.secret_key || key.key;
+			showPublicKey = key.public_key || null;
 			newKeyName = '';
 			await loadKeys();
 			notifications.success('API key created');
@@ -90,12 +92,24 @@
 	<!-- Show newly created key -->
 	{#if showKey}
 		<div class="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-md">
-			<div class="text-sm font-medium text-yellow-800 mb-2">Your new API key (copy it now, it won't be shown again):</div>
-			<div class="flex items-center gap-2">
-				<code class="flex-1 text-sm bg-white px-3 py-2 rounded border border-yellow-300 font-mono break-all">{showKey}</code>
-				<button onclick={() => copyKey(showKey!)} class="px-3 py-2 text-sm bg-yellow-100 hover:bg-yellow-200 rounded">Copy</button>
-				<button onclick={() => showKey = null} class="px-3 py-2 text-sm text-gray-500 hover:text-gray-700">Dismiss</button>
+			<div class="text-sm font-medium text-yellow-800 mb-2">Your new API key pair (copy them now, the secret key won't be shown again):</div>
+			{#if showPublicKey}
+				<div class="mb-2">
+					<div class="text-xs font-medium text-yellow-700 mb-1">Public Key</div>
+					<div class="flex items-center gap-2">
+						<code class="flex-1 text-sm bg-white px-3 py-2 rounded border border-yellow-300 font-mono break-all">{showPublicKey}</code>
+						<button onclick={() => copyKey(showPublicKey!)} class="px-3 py-2 text-sm bg-yellow-100 hover:bg-yellow-200 rounded">Copy</button>
+					</div>
+				</div>
+			{/if}
+			<div class="mb-2">
+				<div class="text-xs font-medium text-yellow-700 mb-1">Secret Key</div>
+				<div class="flex items-center gap-2">
+					<code class="flex-1 text-sm bg-white px-3 py-2 rounded border border-yellow-300 font-mono break-all">{showKey}</code>
+					<button onclick={() => copyKey(showKey!)} class="px-3 py-2 text-sm bg-yellow-100 hover:bg-yellow-200 rounded">Copy</button>
+				</div>
 			</div>
+			<button onclick={() => { showKey = null; showPublicKey = null; }} class="mt-2 px-3 py-2 text-sm text-gray-500 hover:text-gray-700">Dismiss</button>
 		</div>
 	{/if}
 
@@ -119,10 +133,12 @@
 				{#each keys as key}
 					<tr>
 						<td class="px-4 py-3 text-sm font-medium text-gray-900">{key.name || 'Unnamed'}</td>
-						<td class="px-4 py-3 text-sm text-gray-500 font-mono">{key.key.slice(0, 8)}...{key.key.slice(-4)}</td>
+						<td class="px-4 py-3 text-sm text-gray-500 font-mono">{(key.display_secret_key || key.key || '').slice(0, 8)}...{(key.display_secret_key || key.key || '').slice(-4)}</td>
 						<td class="px-4 py-3 text-sm text-gray-500">{new Date(key.created_at).toLocaleDateString()}</td>
 						<td class="px-4 py-3 text-right">
-							<button onclick={() => copyKey(key.key)} class="text-sm text-blue-600 hover:text-blue-800 mr-3">Copy</button>
+							{#if key.key}
+								<button onclick={() => copyKey(key.key)} class="text-sm text-blue-600 hover:text-blue-800 mr-3">Copy</button>
+							{/if}
 							<button onclick={() => deleteKey(key.id)} class="text-sm text-red-600 hover:text-red-800">Delete</button>
 						</td>
 					</tr>

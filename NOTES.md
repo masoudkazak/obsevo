@@ -1,6 +1,11 @@
 # NOTES.md — Obsevo
 
 ## Session log
+- [2026-08-31] Fixed API key creation: frontend wasn't showing secret key after creation
+  - web/src/lib/api.ts: added secret_key, public_key, display_secret_key to APIKey interface
+  - web/src/routes/settings/api-keys/+page.svelte: use key.secret_key || key.key for showKey, show display_secret_key in table, hide copy button for new keys
+  - Root cause: toAPIKeyResponse only sets key field for legacy keys; CreateAPIKeyResponse returns secret_key but frontend typed response as APIKey without it
+  - All checks pass: svelte-check 0 errors, npm build success, go build clean
 - [2026-08-30] Production hardening: fixed evaluator panic, added body size limits, Redis auth, security headers, env validation, structured logging, tests
   - evaluator/evaluator.go: panic() replaced with log+skip for Register/RegisterAlias
   - api/middleware.go: added LimitBody, RequestLogger, enhanced SecurityHeaders (CSP, HSTS, XSS)
