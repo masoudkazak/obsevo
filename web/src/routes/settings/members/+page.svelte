@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { t } from '$lib/i18n';
 	import { api, type Member, type Organization } from '$lib/api';
 	import { organizations, notifications } from '$lib/stores';
 
@@ -23,7 +24,7 @@
 		try {
 			await api.settings.members.updateRole(userId, selectedOrg.id, role);
 			await loadMembers();
-			notifications.success('Role updated');
+			notifications.success($t('settings.roleUpdated'));
 		} catch (e: any) {
 			notifications.error(e.message || 'Failed to update role');
 		}
@@ -31,11 +32,11 @@
 
 	async function removeMember(userId: string) {
 		if (!selectedOrg) return;
-		if (!confirm('Are you sure you want to remove this member?')) return;
+		if (!confirm($t('settings.confirmRemoveMember'))) return;
 		try {
 			await api.settings.members.remove(userId, selectedOrg.id);
 			await loadMembers();
-			notifications.success('Member removed');
+			notifications.success($t('settings.memberRemoved'));
 		} catch (e: any) {
 			notifications.error(e.message || 'Failed to remove member');
 		}
@@ -63,12 +64,12 @@
 </script>
 
 <svelte:head>
-	<title>Members — Settings — Langfuse Light</title>
+	<title>{$t('settings.membersTitle')}</title>
 </svelte:head>
 
 <div class="bg-white rounded-lg border border-gray-200 p-6">
 	<div class="flex items-center justify-between mb-4">
-		<h2 class="text-lg font-semibold text-gray-900">Members</h2>
+		<h2 class="text-lg font-semibold text-gray-900">{$t('settings.membersHeading')}</h2>
 		{#if $organizations.length > 1}
 			<select
 				bind:value={selectedOrg}
@@ -82,17 +83,17 @@
 	</div>
 
 	{#if loading}
-		<div class="text-center py-8 text-gray-500">Loading members...</div>
+		<div class="text-center py-8 text-gray-500">{$t('settings.loadingMembers')}</div>
 	{:else if members.length === 0}
-		<div class="text-center py-8 text-gray-500">No members found.</div>
+		<div class="text-center py-8 text-gray-500">{$t('settings.noMembers')}</div>
 	{:else}
 		<table class="min-w-full divide-y divide-gray-200">
 			<thead class="bg-gray-50">
 				<tr>
-					<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">User</th>
-					<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
-					<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
-					<th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+					<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{$t('settings.columns.user')}</th>
+					<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{$t('settings.columns.email')}</th>
+					<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{$t('settings.columns.role')}</th>
+					<th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">{$t('common.actions')}</th>
 				</tr>
 			</thead>
 			<tbody class="divide-y divide-gray-200">
@@ -112,7 +113,7 @@
 							</select>
 						</td>
 						<td class="px-4 py-3 text-right">
-							<button onclick={() => removeMember(member.user_id)} class="text-sm text-red-600 hover:text-red-800">Remove</button>
+							<button onclick={() => removeMember(member.user_id)} class="text-sm text-red-600 hover:text-red-800">{$t('settings.remove')}</button>
 						</td>
 					</tr>
 				{/each}

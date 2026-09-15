@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { t } from '$lib/i18n';
 	import { page } from '$app/state';
 	import { api, type TraceWithObservations, type Observation } from '$lib/api';
 	import { currentProject, notifications } from '$lib/stores';
@@ -19,7 +20,7 @@
 		try {
 			data = await api.traces.get(id);
 		} catch (e: any) {
-			error = e.message || 'Failed to load trace';
+			error = e.message || $t('traces.detail.failedToLoad');
 		} finally {
 			loading = false;
 		}
@@ -95,14 +96,14 @@
 </script>
 
 <svelte:head>
-	<title>{data?.trace?.name || 'Trace'} — Langfuse Light</title>
+	<title>{data?.trace?.name || $t('traces.detail.title')} — {$t('app.name')}</title>
 </svelte:head>
 
 <div class="max-w-5xl mx-auto">
-	<a href="/traces" class="text-sm text-blue-600 hover:underline mb-4 inline-block">&larr; Back to traces</a>
+	<a href="/traces" class="text-sm text-blue-600 hover:underline mb-4 inline-block">{$t('traces.detail.backToTraces')}</a>
 
 	{#if loading}
-		<div class="text-center py-12 text-gray-500">Loading trace...</div>
+		<div class="text-center py-12 text-gray-500">{$t('traces.detail.loadingTrace')}</div>
 	{:else if error}
 		<div class="text-center py-12 text-red-500">{error}</div>
 	{:else if data}
@@ -111,35 +112,35 @@
 			<h1 class="text-2xl font-bold text-gray-900 mb-4">{data.trace.name || data.trace.id}</h1>
 			<div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
 				<div>
-					<span class="text-gray-500">Trace ID</span>
+					<span class="text-gray-500">{$t('traces.detail.traceId')}</span>
 					<p class="font-mono text-xs mt-1 truncate" title={data.trace.id}>{data.trace.id}</p>
 				</div>
 				<div>
-					<span class="text-gray-500">Project</span>
+					<span class="text-gray-500">{$t('traces.detail.project')}</span>
 					<p class="mt-1">{data.trace.project_name}</p>
 				</div>
 				<div>
-					<span class="text-gray-500">Start</span>
+					<span class="text-gray-500">{$t('traces.detail.start')}</span>
 					<p class="mt-1">{formatTime(data.trace.start_time)}</p>
 				</div>
 				<div>
-					<span class="text-gray-500">Duration</span>
+					<span class="text-gray-500">{$t('traces.detail.duration')}</span>
 					<p class="mt-1">{formatDuration(data.trace.start_time, data.trace.end_time)}</p>
 				</div>
 				<div>
-					<span class="text-gray-500">Cost</span>
+					<span class="text-gray-500">{$t('traces.detail.cost')}</span>
 					<p class="mt-1 font-medium">{formatCost(data.trace.total_cost)}</p>
 				</div>
 				<div>
-					<span class="text-gray-500">User ID</span>
+					<span class="text-gray-500">{$t('traces.detail.userId')}</span>
 					<p class="mt-1">{data.trace.user_id || '—'}</p>
 				</div>
 				<div>
-					<span class="text-gray-500">Session ID</span>
+					<span class="text-gray-500">{$t('traces.detail.sessionId')}</span>
 					<p class="mt-1">{data.trace.session_id || '—'}</p>
 				</div>
 				<div>
-					<span class="text-gray-500">Tags</span>
+					<span class="text-gray-500">{$t('traces.detail.tags')}</span>
 					<p class="mt-1">
 						{#each (data.trace.tags || []) as tag}
 							<span class="inline-block px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs mr-1">{tag}</span>
@@ -153,9 +154,9 @@
 
 		<!-- Observations -->
 		<div class="bg-white rounded-lg border border-gray-200 p-6">
-			<h2 class="text-lg font-semibold mb-4">Observations ({data.observations.length})</h2>
+			<h2 class="text-lg font-semibold mb-4">{$t('traces.detail.observations')} ({data.observations.length})</h2>
 			{#if data.observations.length === 0}
-				<p class="text-gray-500 text-sm">No observations recorded for this trace.</p>
+				<p class="text-gray-500 text-sm">{$t('traces.detail.noObservations')}</p>
 			{:else}
 				<div class="space-y-2">
 					{#each sortedObs as obs}
@@ -181,43 +182,43 @@
 								<div class="px-4 pb-4 border-t border-gray-100">
 									<div class="grid grid-cols-2 gap-4 mt-3 text-sm">
 										<div>
-											<span class="text-gray-500 text-xs">Status</span>
+											<span class="text-gray-500 text-xs">{$t('traces.detail.status')}</span>
 											<p class="mt-1">{obs.status}</p>
 										</div>
 										<div>
-											<span class="text-gray-500 text-xs">Start</span>
+											<span class="text-gray-500 text-xs">{$t('traces.detail.start')}</span>
 											<p class="mt-1">{formatTime(obs.start_time)}</p>
 										</div>
 										<div>
-											<span class="text-gray-500 text-xs">End</span>
+											<span class="text-gray-500 text-xs">{$t('traces.detail.end')}</span>
 											<p class="mt-1">{formatTime(obs.end_time)}</p>
 										</div>
 										<div>
-											<span class="text-gray-500 text-xs">Cost</span>
+											<span class="text-gray-500 text-xs">{$t('traces.detail.cost')}</span>
 											<p class="mt-1">{formatCost(obs.cost)}</p>
 										</div>
 									</div>
 									{#if obs.input}
 										<div class="mt-3">
-											<span class="text-gray-500 text-xs">Input</span>
+											<span class="text-gray-500 text-xs">{$t('traces.detail.input')}</span>
 											<pre class="mt-1 p-3 bg-gray-50 rounded text-xs overflow-x-auto max-h-48">{JSON.stringify(obs.input, null, 2)}</pre>
 										</div>
 									{/if}
 									{#if obs.output}
 										<div class="mt-3">
-											<span class="text-gray-500 text-xs">Output</span>
+											<span class="text-gray-500 text-xs">{$t('traces.detail.output')}</span>
 											<pre class="mt-1 p-3 bg-gray-50 rounded text-xs overflow-x-auto max-h-48">{JSON.stringify(obs.output, null, 2)}</pre>
 										</div>
 									{/if}
 									{#if obs.token_usage}
 										<div class="mt-3">
-											<span class="text-gray-500 text-xs">Token Usage</span>
+											<span class="text-gray-500 text-xs">{$t('traces.detail.tokenUsage')}</span>
 											<pre class="mt-1 p-3 bg-gray-50 rounded text-xs">{JSON.stringify(obs.token_usage, null, 2)}</pre>
 										</div>
 									{/if}
 									{#if obs.metadata}
 										<div class="mt-3">
-											<span class="text-gray-500 text-xs">Metadata</span>
+											<span class="text-gray-500 text-xs">{$t('traces.detail.metadata')}</span>
 											<pre class="mt-1 p-3 bg-gray-50 rounded text-xs">{JSON.stringify(obs.metadata, null, 2)}</pre>
 										</div>
 									{/if}
@@ -232,16 +233,16 @@
 		<!-- Trace input/output -->
 		{#if data.trace.input || data.trace.output}
 			<div class="bg-white rounded-lg border border-gray-200 p-6 mt-6">
-				<h2 class="text-lg font-semibold mb-4">Trace I/O</h2>
+				<h2 class="text-lg font-semibold mb-4">{$t('traces.detail.traceIO')}</h2>
 				{#if data.trace.input}
 					<div class="mb-4">
-						<span class="text-gray-500 text-xs">Input</span>
+						<span class="text-gray-500 text-xs">{$t('traces.detail.input')}</span>
 						<pre class="mt-1 p-3 bg-gray-50 rounded text-xs overflow-x-auto max-h-48">{JSON.stringify(data.trace.input, null, 2)}</pre>
 					</div>
 				{/if}
 				{#if data.trace.output}
 					<div>
-						<span class="text-gray-500 text-xs">Output</span>
+						<span class="text-gray-500 text-xs">{$t('traces.detail.output')}</span>
 						<pre class="mt-1 p-3 bg-gray-50 rounded text-xs overflow-x-auto max-h-48">{JSON.stringify(data.trace.output, null, 2)}</pre>
 					</div>
 				{/if}

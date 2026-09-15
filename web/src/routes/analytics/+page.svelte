@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { t } from '$lib/i18n';
 	import { onMount } from 'svelte';
 	import { api, type AnalyticsSummary, type CostOverTimePoint, type LatencyOverTimePoint, type TokenUsageOverTimePoint, type TraceCountOverTimePoint } from '$lib/api';
 	import { currentProject, notifications } from '$lib/stores';
@@ -67,7 +68,7 @@
 				data: {
 					labels,
 					datasets: [{
-						label: 'Total Cost ($)',
+						label: $t('analytics.datasetLabels.totalCost'),
 						data: costData.map(d => d.total_cost),
 						borderColor: '#3b82f6',
 						backgroundColor: 'rgba(59,130,246,0.1)',
@@ -95,7 +96,7 @@
 					labels: latencyData.map(d => d.time_bucket),
 					datasets: [
 						{
-							label: 'Avg Latency',
+							label: $t('analytics.datasetLabels.avgLatency'),
 							data: latencyData.map(d => d.avg_latency_seconds),
 							borderColor: '#8b5cf6',
 							backgroundColor: 'rgba(139,92,246,0.1)',
@@ -103,7 +104,7 @@
 							tension: 0.3
 						},
 						{
-							label: 'Max Latency',
+							label: $t('analytics.datasetLabels.maxLatency'),
 							data: latencyData.map(d => d.max_latency_seconds),
 							borderColor: '#ef4444',
 							borderDash: [5, 5],
@@ -131,12 +132,12 @@
 					labels: tokenData.map(d => d.time_bucket),
 					datasets: [
 						{
-							label: 'Input Tokens',
+							label: $t('analytics.datasetLabels.inputTokens'),
 							data: tokenData.map(d => d.total_input_tokens),
 							backgroundColor: '#06b6d4'
 						},
 						{
-							label: 'Output Tokens',
+							label: $t('analytics.datasetLabels.outputTokens'),
 							data: tokenData.map(d => d.total_output_tokens),
 							backgroundColor: '#f59e0b'
 						}
@@ -162,12 +163,12 @@
 					labels: traceData.map(d => d.time_bucket),
 					datasets: [
 						{
-							label: 'Total Traces',
+							label: $t('analytics.datasetLabels.totalTraces'),
 							data: traceData.map(d => d.trace_count),
 							backgroundColor: '#10b981'
 						},
 						{
-							label: 'Error Traces',
+							label: $t('analytics.datasetLabels.errorTraces'),
 							data: traceData.map(d => d.error_count),
 							backgroundColor: '#ef4444'
 						}
@@ -201,48 +202,48 @@
 </script>
 
 <svelte:head>
-	<title>Analytics — Langfuse Light</title>
+	<title>{$t('analytics.title')}</title>
 </svelte:head>
 
 <div class="max-w-7xl mx-auto">
 	<div class="flex items-center justify-between mb-6">
-		<h1 class="text-2xl font-bold text-gray-900">Analytics</h1>
+		<h1 class="text-2xl font-bold text-gray-900">{$t('analytics.heading')}</h1>
 		<select
 			bind:value={days}
 			onchange={() => loadData()}
 			class="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
 		>
-			<option value={7}>Last 7 days</option>
-			<option value={14}>Last 14 days</option>
-			<option value={30}>Last 30 days</option>
-			<option value={90}>Last 90 days</option>
+			<option value={7}>{$t('analytics.days7')}</option>
+			<option value={14}>{$t('analytics.days14')}</option>
+			<option value={30}>{$t('analytics.days30')}</option>
+			<option value={90}>{$t('analytics.days90')}</option>
 		</select>
 	</div>
 
 	{#if loading}
-		<div class="text-center py-12 text-gray-500">Loading analytics...</div>
+		<div class="text-center py-12 text-gray-500">{$t('analytics.loadingAnalytics')}</div>
 	{:else if !$currentProject}
 		<div class="text-center py-12 bg-white rounded-lg border border-gray-200">
-			<h3 class="text-sm font-medium text-gray-900">No project selected</h3>
-			<p class="mt-1 text-sm text-gray-500">Create a project from Settings to get started.</p>
+			<h3 class="text-sm font-medium text-gray-900">{$t('common.noProject')}</h3>
+			<p class="mt-1 text-sm text-gray-500">{$t('common.noProjectDesc')}</p>
 		</div>
 	{:else}
 		<!-- Summary Cards -->
 		<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
 			<div class="bg-white rounded-lg border border-gray-200 p-4">
-				<div class="text-sm text-gray-500">Total Traces</div>
+				<div class="text-sm text-gray-500">{$t('analytics.summary.totalTraces')}</div>
 				<div class="text-2xl font-bold text-gray-900">{summary?.latency.total_traces ?? 0}</div>
 			</div>
 			<div class="bg-white rounded-lg border border-gray-200 p-4">
-				<div class="text-sm text-gray-500">Total Cost</div>
+				<div class="text-sm text-gray-500">{$t('analytics.summary.totalCost')}</div>
 				<div class="text-2xl font-bold text-gray-900">{formatCost(summary?.cost.total_cost ?? 0)}</div>
 			</div>
 			<div class="bg-white rounded-lg border border-gray-200 p-4">
-				<div class="text-sm text-gray-500">Avg Latency</div>
+				<div class="text-sm text-gray-500">{$t('analytics.summary.avgLatency')}</div>
 				<div class="text-2xl font-bold text-gray-900">{formatDuration(summary?.latency.avg_latency_seconds ?? 0)}</div>
 			</div>
 			<div class="bg-white rounded-lg border border-gray-200 p-4">
-				<div class="text-sm text-gray-500">Error Rate</div>
+				<div class="text-sm text-gray-500">{$t('analytics.summary.errorRate')}</div>
 				<div class="text-2xl font-bold text-gray-900">{((summary?.error_rate.error_rate ?? 0) * 100).toFixed(1)}%</div>
 			</div>
 		</div>
@@ -250,7 +251,7 @@
 		<div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
 			<!-- Cost Chart -->
 			<div class="bg-white rounded-lg border border-gray-200 p-4">
-				<h3 class="text-sm font-medium text-gray-700 mb-3">Cost Over Time</h3>
+				<h3 class="text-sm font-medium text-gray-700 mb-3">{$t('analytics.charts.costOverTime')}</h3>
 				<div class="h-64">
 					<canvas id="costChart"></canvas>
 				</div>
@@ -258,7 +259,7 @@
 
 			<!-- Latency Chart -->
 			<div class="bg-white rounded-lg border border-gray-200 p-4">
-				<h3 class="text-sm font-medium text-gray-700 mb-3">Latency Over Time</h3>
+				<h3 class="text-sm font-medium text-gray-700 mb-3">{$t('analytics.charts.latencyOverTime')}</h3>
 				<div class="h-64">
 					<canvas id="latencyChart"></canvas>
 				</div>
@@ -266,7 +267,7 @@
 
 			<!-- Token Usage Chart -->
 			<div class="bg-white rounded-lg border border-gray-200 p-4">
-				<h3 class="text-sm font-medium text-gray-700 mb-3">Token Usage</h3>
+				<h3 class="text-sm font-medium text-gray-700 mb-3">{$t('analytics.charts.tokenUsage')}</h3>
 				<div class="h-64">
 					<canvas id="tokenChart"></canvas>
 				</div>
@@ -274,7 +275,7 @@
 
 			<!-- Trace Count Chart -->
 			<div class="bg-white rounded-lg border border-gray-200 p-4">
-				<h3 class="text-sm font-medium text-gray-700 mb-3">Traces & Errors</h3>
+				<h3 class="text-sm font-medium text-gray-700 mb-3">{$t('analytics.charts.tracesAndErrors')}</h3>
 				<div class="h-64">
 					<canvas id="traceChart"></canvas>
 				</div>
@@ -283,18 +284,18 @@
 
 		<!-- Token Summary -->
 		<div class="bg-white rounded-lg border border-gray-200 p-4">
-			<h3 class="text-sm font-medium text-gray-700 mb-3">Token Usage Summary</h3>
+			<h3 class="text-sm font-medium text-gray-700 mb-3">{$t('analytics.tokenSummary')}</h3>
 			<div class="grid grid-cols-3 gap-4">
 				<div>
-					<div class="text-xs text-gray-500">Total Tokens</div>
+					<div class="text-xs text-gray-500">{$t('analytics.totalTokens')}</div>
 					<div class="text-lg font-semibold">{formatTokens(summary?.token_usage.total_tokens ?? 0)}</div>
 				</div>
 				<div>
-					<div class="text-xs text-gray-500">Input Tokens</div>
+					<div class="text-xs text-gray-500">{$t('analytics.inputTokens')}</div>
 					<div class="text-lg font-semibold">{formatTokens(summary?.token_usage.total_input_tokens ?? 0)}</div>
 				</div>
 				<div>
-					<div class="text-xs text-gray-500">Output Tokens</div>
+					<div class="text-xs text-gray-500">{$t('analytics.outputTokens')}</div>
 					<div class="text-lg font-semibold">{formatTokens(summary?.token_usage.total_output_tokens ?? 0)}</div>
 				</div>
 			</div>

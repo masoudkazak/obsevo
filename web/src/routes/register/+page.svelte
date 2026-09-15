@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { t } from '$lib/i18n';
 	import { api } from '$lib/api';
 	import { auth } from '$lib/stores';
 	import { goto } from '$app/navigation';
@@ -17,7 +18,7 @@
 			auth.login(res.token, res.user);
 			goto('/traces');
 		} catch (e: any) {
-			error = e.message || 'Registration failed';
+			error = e.message || $t('auth.registerFailed');
 		} finally {
 			loading = false;
 		}
@@ -25,13 +26,13 @@
 </script>
 
 <svelte:head>
-	<title>Register — Langfuse Light</title>
+	<title>{$t('auth.registerTitleTab')}</title>
 </svelte:head>
 
 <div class="min-h-screen flex items-center justify-center bg-gray-50">
 	<div class="w-full max-w-md p-8 bg-white rounded-lg shadow">
-		<h1 class="text-2xl font-bold text-center mb-6">Langfuse Light</h1>
-		<h2 class="text-lg text-gray-600 text-center mb-8">Create your account</h2>
+		<h1 class="text-2xl font-bold text-center mb-6">{$t('app.name')}</h1>
+		<h2 class="text-lg text-gray-600 text-center mb-8">{$t('auth.registerTitle')}</h2>
 
 		{#if error}
 			<div class="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded text-sm">
@@ -41,7 +42,7 @@
 
 		<form onsubmit={(e) => { e.preventDefault(); handleRegister(); }}>
 			<div class="mb-4">
-				<label for="name" class="block text-sm font-medium text-gray-700 mb-1">Name</label>
+				<label for="name" class="block text-sm font-medium text-gray-700 mb-1">{$t('auth.name')}</label>
 				<input
 					id="name"
 					type="text"
@@ -51,7 +52,7 @@
 				/>
 			</div>
 			<div class="mb-4">
-				<label for="email" class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+				<label for="email" class="block text-sm font-medium text-gray-700 mb-1">{$t('auth.email')}</label>
 				<input
 					id="email"
 					type="email"
@@ -62,7 +63,7 @@
 				/>
 			</div>
 			<div class="mb-6">
-				<label for="password" class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+				<label for="password" class="block text-sm font-medium text-gray-700 mb-1">{$t('auth.password')}</label>
 				<input
 					id="password"
 					type="password"
@@ -78,13 +79,13 @@
 				disabled={loading}
 				class="w-full py-2 px-4 bg-blue-600 text-white rounded-md font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
 			>
-				{loading ? 'Creating account...' : 'Create account'}
+				{loading ? $t('auth.creatingAccount') : $t('auth.createAccount')}
 			</button>
 		</form>
 
 		<p class="mt-4 text-center text-sm text-gray-600">
-			Already have an account?
-			<a href="/login" class="text-blue-600 hover:underline">Sign in</a>
+			{$t('auth.hasAccount')}
+			<a href="/login" class="text-blue-600 hover:underline">{$t('auth.goLogin')}</a>
 		</p>
 	</div>
 </div>

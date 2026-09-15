@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { t } from '$lib/i18n';
 	import { page } from '$app/state';
 	import { api, type Prompt, type PromptWithVariables } from '$lib/api';
 	import { currentProject, notifications } from '$lib/stores';
@@ -72,7 +73,7 @@
 				{ prompt: editContent, config },
 				$currentProject.id
 			);
-			notifications.success('Prompt updated');
+			notifications.success($t('prompts.promptUpdated'));
 			await loadPrompt(prompt.name);
 		} catch (e: any) {
 			notifications.error(e.message || 'Failed to update prompt');
@@ -92,7 +93,7 @@
 				{ prompt: newContent.trim(), config, is_active: true },
 				$currentProject.id
 			);
-			notifications.success('New version created');
+			notifications.success($t('prompts.versionCreated'));
 			showNewVersion = false;
 			newContent = '';
 			newConfig = '{}';
@@ -108,7 +109,7 @@
 		if (!prompt || !$currentProject) return;
 		try {
 			await api.prompts.setActive(prompt.name, version, $currentProject.id);
-			notifications.success(`Version ${version} set as active`);
+			notifications.success($t('prompts.versionSetActive'));
 			await loadPrompt(prompt.name);
 		} catch (e: any) {
 			notifications.error(e.message || 'Failed to set active version');
@@ -117,29 +118,29 @@
 </script>
 
 <svelte:head>
-	<title>{page.params.name} — Langfuse Light</title>
+	<title>{page.params.name} — {$t('app.name')}</title>
 </svelte:head>
 
 <div class="max-w-5xl mx-auto">
-	<a href="/prompts" class="text-sm text-blue-600 hover:underline mb-4 inline-block">&larr; Back to prompts</a>
+	<a href="/prompts" class="text-sm text-blue-600 hover:underline mb-4 inline-block">{$t('prompts.backToPrompts')}</a>
 
 	{#if loading}
-		<div class="text-center py-12 text-gray-500">Loading prompt...</div>
+		<div class="text-center py-12 text-gray-500">{$t('prompts.loadingPrompt')}</div>
 	{:else if prompt}
 		<!-- Header -->
 		<div class="flex items-center justify-between mb-6">
 			<div>
 				<h1 class="text-2xl font-bold text-gray-900">{prompt.name}</h1>
 				<p class="text-sm text-gray-500 mt-1">
-					Active version: <span class="font-medium text-blue-600">v{prompt.version}</span>
-					&middot; {versions.length} total versions
+					{$t('prompts.activeVersion')} <span class="font-medium text-blue-600">v{prompt.version}</span>
+					&middot; {$t('prompts.totalVersions')}
 				</p>
 			</div>
 			<button
 				onclick={() => { showNewVersion = true; newContent = editContent; }}
 				class="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700"
 			>
-				New Version
+				{$t('prompts.newVersion')}
 			</button>
 		</div>
 
@@ -149,13 +150,13 @@
 				class="px-4 py-2 text-sm font-medium border-b-2 {activeTab === 'editor' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}"
 				onclick={() => activeTab = 'editor'}
 			>
-				Editor
+				{$t('prompts.editor')}
 			</button>
 			<button
 				class="px-4 py-2 text-sm font-medium border-b-2 {activeTab === 'versions' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}"
 				onclick={() => activeTab = 'versions'}
 			>
-				Versions
+				{$t('prompts.versions')}
 			</button>
 		</div>
 
@@ -163,7 +164,7 @@
 			<!-- Variables detected -->
 			{#if detectedVars.length > 0}
 				<div class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
-					<span class="text-xs font-medium text-blue-700">Template variables: </span>
+					<span class="text-xs font-medium text-blue-700">{$t('prompts.templateVariables')}</span>
 					{#each detectedVars as v}
 						<code class="px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded text-xs mr-1">{'{{'}{v}{'}}'}</code>
 					{/each}
@@ -173,7 +174,7 @@
 			<!-- Editor -->
 			<div class="bg-white rounded-lg border border-gray-200 p-6">
 				<div class="mb-4">
-					<label for="edit-prompt" class="block text-sm font-medium text-gray-700 mb-1">Prompt Template</label>
+					<label for="edit-prompt" class="block text-sm font-medium text-gray-700 mb-1">{$t('prompts.promptTemplate')}</label>
 					<textarea
 						id="edit-prompt"
 						bind:value={editContent}
@@ -182,7 +183,7 @@
 					></textarea>
 				</div>
 				<div class="mb-4">
-					<label for="edit-config" class="block text-sm font-medium text-gray-700 mb-1">Config (JSON)</label>
+					<label for="edit-config" class="block text-sm font-medium text-gray-700 mb-1">{$t('prompts.configJson')}</label>
 					<textarea
 						id="edit-config"
 						bind:value={editConfig}
@@ -195,13 +196,13 @@
 					disabled={saving}
 					class="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
 				>
-					{saving ? 'Saving...' : 'Save Changes'}
+					{saving ? $t('common.saving') : $t('prompts.saveChanges')}
 				</button>
 			</div>
 
 			<!-- Preview -->
 			<div class="bg-white rounded-lg border border-gray-200 p-6 mt-6">
-				<h3 class="text-sm font-medium text-gray-700 mb-3">Template Preview</h3>
+				<h3 class="text-sm font-medium text-gray-700 mb-3">{$t('prompts.templatePreview')}</h3>
 				{#if detectedVars.length > 0}
 					<div class="mb-4 space-y-2">
 						{#each detectedVars as v}
@@ -227,9 +228,9 @@
 					<div class="bg-white rounded-lg border border-gray-200 p-4 flex items-center justify-between">
 						<div>
 							<div class="flex items-center gap-2">
-								<span class="text-sm font-semibold text-gray-900">Version {v.version}</span>
+								<span class="text-sm font-semibold text-gray-900">{$t('common.version')} {v.version}</span>
 								{#if v.is_active}
-									<span class="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium">Active</span>
+									<span class="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium">{$t('common.active')}</span>
 								{/if}
 							</div>
 							<p class="text-xs text-gray-500 mt-1">{formatTime(v.created_at)}</p>
@@ -240,7 +241,7 @@
 								onclick={() => setActiveVersion(v.version)}
 								class="px-3 py-1.5 text-xs border border-gray-300 rounded-md hover:bg-gray-50"
 							>
-								Set Active
+								{$t('common.setActive')}
 							</button>
 						{/if}
 					</div>
@@ -254,10 +255,10 @@
 {#if showNewVersion}
 	<div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
 		<div class="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4 p-6">
-			<h2 class="text-lg font-semibold mb-4">New Version</h2>
+			<h2 class="text-lg font-semibold mb-4">{$t('prompts.newVersion')}</h2>
 			<form onsubmit={(e) => { e.preventDefault(); createNewVersion(); }}>
 				<div class="mb-4">
-					<label for="new-prompt" class="block text-sm font-medium text-gray-700 mb-1">Prompt Template</label>
+					<label for="new-prompt" class="block text-sm font-medium text-gray-700 mb-1">{$t('prompts.promptTemplate')}</label>
 					<textarea
 						id="new-prompt"
 						bind:value={newContent}
@@ -267,7 +268,7 @@
 					></textarea>
 				</div>
 				<div class="mb-6">
-					<label for="new-config" class="block text-sm font-medium text-gray-700 mb-1">Config (JSON)</label>
+					<label for="new-config" class="block text-sm font-medium text-gray-700 mb-1">{$t('prompts.configJson')}</label>
 					<textarea
 						id="new-config"
 						bind:value={newConfig}
@@ -281,14 +282,14 @@
 						onclick={() => showNewVersion = false}
 						class="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md"
 					>
-						Cancel
+						{$t('common.cancel')}
 					</button>
 					<button
 						type="submit"
 						disabled={saving}
 						class="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
 					>
-						{saving ? 'Creating...' : 'Create Version'}
+						{saving ? $t('common.creating') : $t('prompts.createVersion')}
 					</button>
 				</div>
 			</form>

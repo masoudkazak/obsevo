@@ -1,6 +1,16 @@
 # NOTES.md — Obsevo
 
 ## Session log
+- [2026-09-15] Added multilingual i18n support (English + Russian)
+  - Installed svelte-i18n dependency
+  - Created web/src/lib/i18n/index.ts — i18n setup with locale persistence in localStorage
+  - Created web/src/lib/i18n/en.json — English translations (~170 keys)
+  - Created web/src/lib/i18n/ru.json — Russian translations (~170 keys)
+  - Updated all 14 .svelte files to use $t() translation function
+  - Added language switcher dropdown in sidebar (below Project selector)
+  - Language switcher supports English and Русский options
+  - Locale preference persisted in localStorage
+  - All checks pass: svelte-check 0 errors, npm build success
 - [2026-08-31] Fixed API key creation: frontend wasn't showing secret key after creation
   - web/src/lib/api.ts: added secret_key, public_key, display_secret_key to APIKey interface
   - web/src/routes/settings/api-keys/+page.svelte: use key.secret_key || key.key for showKey, show display_secret_key in table, hide copy button for new keys
@@ -117,6 +127,9 @@
 - Analytics queries: raw SQL in queries.sql for aggregation (avg/min/max latency, cost, tokens, error rate)
 - Score sources: USER, EVALUATOR, SDK (per DB constraint)
 - SDK API auth: x-api-key header (validates against api_keys table, extracts project_id)
+- i18n library: svelte-i18n (chosen for Svelte 5 compatibility)
+- i18n locales: English (en) + Russian (ru), stored in localStorage
+- i18n translation structure: nested JSON with flat keys for simple strings (no parameterized messages due to svelte-i18n type constraints)
 
 ## TODO (found while working)
 - ...

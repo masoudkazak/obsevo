@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { t } from '$lib/i18n';
 	import { api, type Prompt } from '$lib/api';
 	import { currentProject, notifications } from '$lib/stores';
 	import { goto } from '$app/navigation';
@@ -59,7 +60,7 @@
 		creating = true;
 		try {
 			await api.prompts.create({ name: newName.trim(), prompt: newPrompt.trim() }, $currentProject.id);
-			notifications.success('Prompt created');
+			notifications.success($t('prompts.promptCreated'));
 			showCreateModal = false;
 			newName = '';
 			newPrompt = '';
@@ -73,17 +74,17 @@
 </script>
 
 <svelte:head>
-	<title>Prompts — Langfuse Light</title>
+	<title>{$t('prompts.title')}</title>
 </svelte:head>
 
 <div class="max-w-7xl mx-auto">
 	<div class="flex items-center justify-between mb-6">
-		<h1 class="text-2xl font-bold text-gray-900">Prompts</h1>
+		<h1 class="text-2xl font-bold text-gray-900">{$t('prompts.heading')}</h1>
 		<button
 			onclick={() => showCreateModal = true}
 			class="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700"
 		>
-			New Prompt
+			{$t('prompts.newPrompt')}
 		</button>
 	</div>
 
@@ -92,25 +93,25 @@
 		<input
 			type="text"
 			bind:value={searchQuery}
-			placeholder="Search prompts..."
+			placeholder={$t('prompts.searchPlaceholder')}
 			class="px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm w-64"
 		/>
 	</div>
 
 	{#if loading}
-		<div class="text-center py-12 text-gray-500">Loading prompts...</div>
+		<div class="text-center py-12 text-gray-500">{$t('prompts.loadingPrompts')}</div>
 	{:else if !$currentProject}
 		<div class="text-center py-12 bg-white rounded-lg border border-gray-200">
-			<h3 class="text-sm font-medium text-gray-900">No project selected</h3>
-			<p class="mt-1 text-sm text-gray-500">Create a project from Settings to get started.</p>
+			<h3 class="text-sm font-medium text-gray-900">{$t('common.noProject')}</h3>
+			<p class="mt-1 text-sm text-gray-500">{$t('common.noProjectDesc')}</p>
 		</div>
 	{:else if grouped.size === 0}
 		<div class="text-center py-12 bg-white rounded-lg border border-gray-200">
 			<svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
 			</svg>
-			<h3 class="mt-2 text-sm font-medium text-gray-900">No prompts</h3>
-			<p class="mt-1 text-sm text-gray-500">Create your first prompt to get started.</p>
+			<h3 class="mt-2 text-sm font-medium text-gray-900">{$t('prompts.noPrompts')}</h3>
+			<p class="mt-1 text-sm text-gray-500">{$t('prompts.noPromptsDesc')}</p>
 		</div>
 	{:else}
 		<div class="space-y-3">
@@ -131,7 +132,7 @@
 								v{active.version}
 							</span>
 							{#if versionCount > 1}
-								<span class="text-xs text-gray-400 ml-2">{versionCount} versions</span>
+								<span class="text-xs text-gray-400 ml-2">{versionCount} {$t('prompts.versionsCount')}</span>
 							{/if}
 							<p class="text-xs text-gray-400 mt-1">{formatTime(active.created_at)}</p>
 						</div>
@@ -146,21 +147,21 @@
 {#if showCreateModal}
 	<div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
 		<div class="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4 p-6">
-			<h2 class="text-lg font-semibold mb-4">Create Prompt</h2>
+			<h2 class="text-lg font-semibold mb-4">{$t('prompts.createPrompt')}</h2>
 			<form onsubmit={(e) => { e.preventDefault(); createPrompt(); }}>
 				<div class="mb-4">
-					<label for="pname" class="block text-sm font-medium text-gray-700 mb-1">Name</label>
+					<label for="pname" class="block text-sm font-medium text-gray-700 mb-1">{$t('common.name')}</label>
 					<input
 						id="pname"
 						type="text"
 						bind:value={newName}
 						required
 						class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-						placeholder="e.g. summarization"
+						placeholder={$t('prompts.namePlaceholder')}
 					/>
 				</div>
 				<div class="mb-6">
-					<label for="pprompt" class="block text-sm font-medium text-gray-700 mb-1">Prompt Template</label>
+					<label for="pprompt" class="block text-sm font-medium text-gray-700 mb-1">{$t('prompts.promptTemplate')}</label>
 					<textarea
 						id="pprompt"
 						bind:value={newPrompt}
@@ -176,14 +177,14 @@
 						onclick={() => showCreateModal = false}
 						class="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md"
 					>
-						Cancel
+						{$t('common.cancel')}
 					</button>
 					<button
 						type="submit"
 						disabled={creating}
 						class="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
 					>
-						{creating ? 'Creating...' : 'Create'}
+						{creating ? $t('common.creating') : $t('common.create')}
 					</button>
 				</div>
 			</form>

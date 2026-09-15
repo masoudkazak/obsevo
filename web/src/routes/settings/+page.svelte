@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { t } from '$lib/i18n';
 	import { api, type UserProfile } from '$lib/api';
 	import { auth, notifications } from '$lib/stores';
 
@@ -23,7 +24,7 @@
 		saving = true;
 		try {
 			await api.settings.profile.update({ name });
-			notifications.success('Profile updated');
+			notifications.success($t('settings.profileUpdated'));
 		} catch (e: any) {
 			notifications.error(e.message || 'Failed to update profile');
 		} finally {
@@ -37,17 +38,17 @@
 </script>
 
 <svelte:head>
-	<title>Profile — Settings — Langfuse Light</title>
+	<title>{$t('settings.profile')} — {$t('settings.heading')} — {$t('app.name')}</title>
 </svelte:head>
 
 {#if loading}
-	<div class="text-center py-8 text-gray-500">Loading profile...</div>
+	<div class="text-center py-8 text-gray-500">{$t('settings.loadingProfile')}</div>
 {:else}
 	<div class="bg-white rounded-lg border border-gray-200 p-6">
-		<h2 class="text-lg font-semibold text-gray-900 mb-4">Profile</h2>
+		<h2 class="text-lg font-semibold text-gray-900 mb-4">{$t('settings.profile')}</h2>
 		<div class="space-y-4">
 			<div>
-				<label for="email" class="block text-sm font-medium text-gray-700">Email</label>
+				<label for="email" class="block text-sm font-medium text-gray-700">{$t('auth.email')}</label>
 				<input
 					id="email"
 					type="email"
@@ -57,7 +58,7 @@
 				/>
 			</div>
 			<div>
-				<label for="name" class="block text-sm font-medium text-gray-700">Name</label>
+				<label for="name" class="block text-sm font-medium text-gray-700">{$t('auth.name')}</label>
 				<input
 					id="name"
 					type="text"
@@ -66,7 +67,7 @@
 				/>
 			</div>
 			<div>
-				<span class="block text-sm font-medium text-gray-700">Created</span>
+				<span class="block text-sm font-medium text-gray-700">{$t('settings.created')}</span>
 				<div class="mt-1 text-sm text-gray-500">{profile?.created_at ? new Date(profile.created_at).toLocaleDateString() : '—'}</div>
 			</div>
 			<div class="pt-2">
@@ -75,7 +76,7 @@
 					disabled={saving}
 					class="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
 				>
-					{saving ? 'Saving...' : 'Save Changes'}
+					{saving ? $t('common.saving') : $t('common.save')}
 				</button>
 			</div>
 		</div>

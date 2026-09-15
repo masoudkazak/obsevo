@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { t } from '$lib/i18n';
 	import { api, type Trace } from '$lib/api';
 	import { currentProject, notifications } from '$lib/stores';
 	import { goto } from '$app/navigation';
@@ -65,13 +66,13 @@
 </script>
 
 <svelte:head>
-	<title>Traces — Langfuse Light</title>
+	<title>{$t('traces.title')}</title>
 </svelte:head>
 
 <div class="max-w-7xl mx-auto">
 	<div class="flex items-center justify-between mb-6">
-		<h1 class="text-2xl font-bold text-gray-900">Traces</h1>
-		<span class="text-sm text-gray-500">{total} total</span>
+		<h1 class="text-2xl font-bold text-gray-900">{$t('traces.heading')}</h1>
+		<span class="text-sm text-gray-500">{total} {$t('common.total')}</span>
 	</div>
 
 	<!-- Filters -->
@@ -79,7 +80,7 @@
 		<input
 			type="text"
 			bind:value={nameFilter}
-			placeholder="Filter by name..."
+			placeholder={$t('traces.filterPlaceholder')}
 			class="px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm w-64"
 			onkeydown={(e) => { if (e.key === 'Enter') { offset = 0; loadTraces(); } }}
 		/>
@@ -87,36 +88,36 @@
 			onclick={() => { offset = 0; loadTraces(); }}
 			class="px-4 py-2 bg-gray-100 text-gray-700 rounded-md text-sm font-medium hover:bg-gray-200"
 		>
-			Search
+			{$t('common.search')}
 		</button>
 	</div>
 
 	{#if loading}
-		<div class="text-center py-12 text-gray-500">Loading traces...</div>
+		<div class="text-center py-12 text-gray-500">{$t('traces.loadingTraces')}</div>
 	{:else if !$currentProject}
 		<div class="text-center py-12 bg-white rounded-lg border border-gray-200">
-			<h3 class="text-sm font-medium text-gray-900">No project selected</h3>
-			<p class="mt-1 text-sm text-gray-500">Create a project from Settings to get started.</p>
+			<h3 class="text-sm font-medium text-gray-900">{$t('common.noProject')}</h3>
+			<p class="mt-1 text-sm text-gray-500">{$t('common.noProjectDesc')}</p>
 		</div>
 	{:else if traces.length === 0}
 		<div class="text-center py-12 bg-white rounded-lg border border-gray-200">
 			<svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
 			</svg>
-			<h3 class="mt-2 text-sm font-medium text-gray-900">No traces</h3>
-			<p class="mt-1 text-sm text-gray-500">Get started by creating a trace via the API.</p>
+			<h3 class="mt-2 text-sm font-medium text-gray-900">{$t('traces.noTraces')}</h3>
+			<p class="mt-1 text-sm text-gray-500">{$t('traces.noTracesDesc')}</p>
 		</div>
 	{:else}
 		<div class="bg-white rounded-lg border border-gray-200 overflow-hidden">
 			<table class="min-w-full divide-y divide-gray-200">
 				<thead class="bg-gray-50">
 					<tr>
-						<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-						<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Start Time</th>
-						<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Duration</th>
-						<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cost</th>
-						<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">User</th>
-						<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tags</th>
+						<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{$t('traces.columns.name')}</th>
+						<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{$t('traces.columns.startTime')}</th>
+						<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{$t('traces.columns.duration')}</th>
+						<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{$t('traces.columns.cost')}</th>
+						<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{$t('traces.columns.user')}</th>
+						<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{$t('traces.columns.tags')}</th>
 					</tr>
 				</thead>
 				<tbody class="divide-y divide-gray-200">
@@ -146,7 +147,7 @@
 		<!-- Pagination -->
 		<div class="flex items-center justify-between mt-4">
 			<span class="text-sm text-gray-500">
-				Showing {offset + 1}–{Math.min(offset + limit, total)} of {total}
+				{offset + 1}–{Math.min(offset + limit, total)} {$t('common.of')} {total}
 			</span>
 			<div class="flex gap-2">
 				<button
@@ -154,14 +155,14 @@
 					disabled={offset === 0}
 					class="px-3 py-1.5 text-sm border border-gray-300 rounded-md disabled:opacity-50 hover:bg-gray-50"
 				>
-					Previous
+					{$t('common.previous')}
 				</button>
 				<button
 					onclick={nextPage}
 					disabled={offset + limit >= total}
 					class="px-3 py-1.5 text-sm border border-gray-300 rounded-md disabled:opacity-50 hover:bg-gray-50"
 				>
-					Next
+					{$t('common.next')}
 				</button>
 			</div>
 		</div>

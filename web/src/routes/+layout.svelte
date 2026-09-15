@@ -1,5 +1,7 @@
 <script lang="ts">
 	import '../app.css';
+	import { t } from '$lib/i18n';
+	import { setLocale, getCurrentLocale } from '$lib/i18n';
 	import { auth, isAuthenticated, projects, currentProject, notifications, organizations } from '$lib/stores';
 	import { api } from '$lib/api';
 	import { goto } from '$app/navigation';
@@ -8,6 +10,7 @@
 	let { children } = $props();
 	let sidebarOpen = $state(true);
 	let projectsLoaded = $state(false);
+	let locale = $state(getCurrentLocale());
 
 	$effect(() => {
 		if (!$isAuthenticated) {
@@ -39,12 +42,18 @@
 		currentProject.set(project);
 	}
 
+	function handleLocaleChange(e: Event) {
+		const val = (e.target as HTMLSelectElement).value;
+		locale = val;
+		setLocale(val);
+	}
+
 	let currentPath = $derived(page.url.pathname);
 </script>
 
 <svelte:head>
 	<link rel="icon" href="/favicon.svg" />
-	<title>Langfuse Light</title>
+	<title>{$t('app.name')}</title>
 </svelte:head>
 
 {#if $isAuthenticated}
@@ -53,7 +62,7 @@
 		<aside class="{sidebarOpen ? 'w-64' : 'w-16'} bg-gray-900 text-white flex flex-col transition-all duration-200">
 			<div class="flex items-center justify-between p-4 border-b border-gray-700">
 				{#if sidebarOpen}
-					<span class="text-lg font-bold tracking-tight">Langfuse Light</span>
+					<span class="text-lg font-bold tracking-tight">{$t('app.name')}</span>
 				{/if}
 				<button
 					onclick={() => sidebarOpen = !sidebarOpen}
@@ -74,7 +83,7 @@
 			<!-- Project selector -->
 			{#if sidebarOpen && $projects.length > 0}
 				<div class="p-3 border-b border-gray-700">
-					<label for="project-select" class="text-xs text-gray-400 uppercase tracking-wider">Project</label>
+					<label for="project-select" class="text-xs text-gray-400 uppercase tracking-wider">{$t('nav.project')}</label>
 					<select
 						id="project-select"
 						class="w-full mt-1 bg-gray-800 border border-gray-600 rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
@@ -92,6 +101,22 @@
 				</div>
 			{/if}
 
+			<!-- Language switcher -->
+			{#if sidebarOpen}
+				<div class="p-3 border-b border-gray-700">
+					<label for="locale-select" class="text-xs text-gray-400 uppercase tracking-wider">Language</label>
+					<select
+						id="locale-select"
+						class="w-full mt-1 bg-gray-800 border border-gray-600 rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+						onchange={handleLocaleChange}
+						value={locale}
+					>
+						<option value="en">English</option>
+						<option value="ru">Русский</option>
+					</select>
+				</div>
+			{/if}
+
 			<nav class="flex-1 p-2 space-y-1">
 				<a
 					href="/traces"
@@ -101,7 +126,7 @@
 					<svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
 					</svg>
-					{#if sidebarOpen}Traces{/if}
+					{#if sidebarOpen}{$t('nav.traces')}{/if}
 				</a>
 				<a
 					href="/prompts"
@@ -111,7 +136,7 @@
 					<svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
 					</svg>
-					{#if sidebarOpen}Prompts{/if}
+					{#if sidebarOpen}{$t('nav.prompts')}{/if}
 				</a>
 			<a
 				href="/analytics"
@@ -121,7 +146,7 @@
 				<svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
 				</svg>
-				{#if sidebarOpen}Analytics{/if}
+				{#if sidebarOpen}{$t('nav.analytics')}{/if}
 			</a>
 			<a
 				href="/datasets"
@@ -131,7 +156,7 @@
 				<svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
 				</svg>
-				{#if sidebarOpen}Datasets{/if}
+				{#if sidebarOpen}{$t('nav.datasets')}{/if}
 			</a>
 			<a
 				href="/settings"
@@ -142,7 +167,7 @@
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
 					</svg>
-					{#if sidebarOpen}Settings{/if}
+					{#if sidebarOpen}{$t('nav.settings')}{/if}
 				</a>
 			</nav>
 
@@ -158,7 +183,7 @@
 					<svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
 					</svg>
-					{#if sidebarOpen}Logout{/if}
+					{#if sidebarOpen}{$t('nav.logout')}{/if}
 				</button>
 			</div>
 		</aside>
